@@ -6,6 +6,8 @@ Salidas:  stores/processed/{train,test}_features.csv
 Uso: python scripts/02_build_features.py
 """
 
+import re
+
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
@@ -69,6 +71,53 @@ TEXT_FLAGS = {
     "txt_spa": r"sauna|turco|jacuzzi|squash",
     "txt_exterior": r"\bexterior\b",
 }
+
+# Señales de lujo que no estaban en TEXT_FLAGS. Todas suben el precio y no dependen del barrio.
+LUXURY_FLAGS = {
+    # Terraza de uso exclusivo (no la comunal con BBQ): más área útil y escasa en la ciudad.
+    "txt_private_terrace": r"terrazas? (?:\w+ ){0,3}?(?:privadas?|de uso (?:privado|exclusivo)|exclusivas?|propias?)",
+    # Ascensor que abre dentro del apartamento: típico de edificios de un apartamento por piso.
+    "txt_private_elevator": r"ascensor(?:es)? (?:\w+ ){0,2}?(?:privados?|directos?|exclusivos?)",
+    # Club house o casa club: conjuntos de gama alta con amenidades propias.
+    "txt_club_house": r"club ?house|casa club",
+    # Doble altura: diseño de gama alta, común en penthouses y dúplex.
+    "txt_double_height": r"doble altura",
+    # Vista a los cerros o la montaña (la vista panorámica ya está en txt_view).
+    "txt_view_hills": r"vista (?:\w+ ){0,3}?(?:cerros|montana|monserrate)",
+    # Penthouse sin '\bph\b', que en los anuncios suele significar propiedad horizontal.
+    "txt_penthouse_strict": r"penthouse|pent house",
+}
+
+# Números escritos con palabras, para áreas como 'ciento catorce metros cuadrados'.
+# 'noventa' llega como 'no' porque los datos eliminan la palabra 'venta'.
+SPELLED_VALUES = {
+    "un": 1, "uno": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6,
+    "siete": 7, "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12, "trece": 13,
+    "catorce": 14, "quince": 15, "dieciseis": 16, "diecisiete": 17, "dieciocho": 18,
+    "diecinueve": 19, "veinte": 20, "veintiun": 21, "veintiuno": 21, "veintidos": 22,
+    "veintitres": 23, "veinticuatro": 24, "veinticinco": 25, "veintiseis": 26,
+    "veintisiete": 27, "veintiocho": 28, "veintinueve": 29, "treinta": 30, "cuarenta": 40,
+    "cincuenta": 50, "sesenta": 60, "setenta": 70, "ochenta": 80, "no": 90, "cien": 100,
+    "ciento": 100, "doscientos": 200, "trescientos": 300, "cuatrocientos": 400,
+    "quinientos": 500, "seiscientos": 600, "setecientos": 700, "ochocientos": 800,
+    "novecientos": 900,
+}
+_WORD = "|".join(sorted((w for w in SPELLED_VALUES if w != "no"), key=len, reverse=True))
+_WORD = rf"(?:{_WORD}|no(?= y ))"
+AREA_UNIT = (r"(?:m ?sup2|mtrs? ?2|mts ?2|mt2|m2|m 2\b|metros? cuadrados|mts cuadrados"
+             r"|mtrs|mts|mt\b|metros\b|m\b)")
+SPELLED_AREA = rf"\b({_WORD}(?: (?:y |mil |punto )?{_WORD}| mil\b)*)(?= {AREA_UNIT})"
+AREA_CANDIDATE = (rf"\b(\d{{1,4}}(?:\.\d{{1,2}})?) ?{AREA_UNIT}"
+                  r"|area (?:construida|privada|total|util)(?: aproximada)?(?: de| es de)? (\d{2,4})\b")
+# Un número seguido de metros no es el área si describe una parte, una distancia o una altura.
+NOT_AREA_BEFORE = (r"(?:\b(?:terrazas?|balcon(?:es)?|patio|lote|terreno|jardin|antejardin|frente"
+                   r"|fondo|garajes?|parqueaderos?|deposito|altillo)(?: \w+){0,2}|\d ?x) $")
+# Distancias ('a 200 metros'): solo se descartan si la unidad no es explícitamente cuadrada.
+DISTANCE_BEFORE = r"\b(?:a|unos|pocos|escasos|solo) $"
+SQUARE_UNIT = r"sup2|m[trs]{0,3} ?2\b|cuadrad"
+NOT_AREA_AFTER = (r"^ ?(?:cuadrados )?(?:de (?:la|el|del|los|las|distancia|altura|alto|frente|fondo"
+                  r"|terraza|balcon|patio|jardin|lote|transmilenio|parque|estacion|centro|avenida"
+                  r"|calle|carrera)\b|al\b|a la\b|hacia\b|x ?\d|(?:de )?(?:frente|fondo)\b)")
 
 
 def to_number(token):
@@ -134,6 +183,94 @@ def add_structural_and_text(df):
     return out
 
 
+def words_to_value(phrase):
+    """'dos mil ochocientos ochenta' -> 2880."""
+    total, current = 0, 0
+    for token in phrase.split():
+        if token == "mil":
+            total, current = total + max(current, 1) * 1000, 0
+        elif token != "y":
+            current += SPELLED_VALUES[token]
+    return total + current
+
+
+def spelled_to_number(phrase):
+    """'ciento setenta y cuatro punto ochenta y siete' -> '174.87'."""
+    integer, _, decimals = phrase.partition(" punto ")
+    value = str(words_to_value(integer))
+    return f"{value}.{words_to_value(decimals)}" if decimals else value
+
+
+def normalize_numbers(text):
+    """Escribe con dígitos los números que preceden a una unidad de área y recupera el
+    punto decimal dicho con palabras ('146 punto 3 mts' -> '146.3 mts'). También repara
+    'aacute rea', resto de la entidad HTML de 'área'."""
+    text = text.str.replace("aacute rea", "area", regex=False)
+    text = text.str.replace(SPELLED_AREA, lambda m: spelled_to_number(m.group(1)), regex=True)
+    return text.str.replace(r"(\d+) punto (\d+)", r"\1.\2", regex=True)
+
+
+def is_area_context(text, start, end):
+    """Falso si el número describe una terraza, un lote, una distancia o una altura."""
+    before, after = text[max(0, start - 40):start], text[end:end + 30]
+    is_distance = (re.search(DISTANCE_BEFORE, before)
+                   and not re.search(SQUARE_UNIT, text[start:end + 10]))
+    return not (is_distance or re.search(NOT_AREA_BEFORE, before)
+                or re.match(NOT_AREA_AFTER, after))
+
+
+def first_plausible_area(text, ceiling, rescale_above):
+    """Primera mención de área que pasa el filtro de contexto y cae en [20, ceiling] m2.
+    Sin punto decimal, '1463 mts' se lee como 146.3 si 1463 supera 'rescale_above'."""
+    for match in re.finditer(AREA_CANDIDATE, text):
+        token = match.group(1) or match.group(2)
+        if not is_area_context(text, match.start(), match.end()):
+            continue
+        value = float(token)
+        for _ in range(2 if "." not in token else 0):
+            value = value / 10 if value > rescale_above else value
+        if 20 <= value <= ceiling:
+            return value
+    return np.nan
+
+
+def add_extended_area(out, text):
+    """surface_ext: el área de 'surface' y, si falta, la que recuperan los patrones ampliados.
+    Techo de plausibilidad: 2.000 m2 para casas y 1.000 m2 para apartamentos. En un
+    apartamento, un entero mayor que 600 casi siempre es un decimal sin punto ('6871')."""
+    is_house = out["is_house"] == 1
+    ceilings = np.where(is_house, 2000, 1000)
+    rescale_above = np.where(is_house, 2000, 600)
+    normalized = normalize_numbers(text)
+    recovered = [first_plausible_area(t, c, r)
+                 for t, c, r in zip(normalized, ceilings, rescale_above)]
+    out["surface_ext"] = out["surface"].fillna(pd.Series(recovered, index=out.index))
+    out["surface_ext_missing"] = out["surface_ext"].isna().astype(int)
+    out["log_surface_ext"] = np.log(out["surface_ext"])
+    return out
+
+
+def add_luxury_signals(out, text):
+    """Señales de lujo del texto y su conteo (txt_lux_score)."""
+    for name, pattern in LUXURY_FLAGS.items():
+        out[name] = text.str.contains(pattern, regex=True).astype(int)
+    out["txt_stratum_6"] = text.str.contains(r"estrato (?:6|seis)\b", regex=True).astype(int)
+    # Tres o más parqueaderos: casas y apartamentos grandes de estrato alto.
+    many_cars = text.str.contains(
+        r"(?:parqueaderos?|garajes?|espacio) para (?:[3-6]|tres|cuatro|cinco|seis) "
+        r"(?:carros|vehiculos)", regex=True)
+    out["txt_parking_3plus"] = ((out["txt_n_parking"] >= 3) | many_cars).astype(int)
+    out["txt_lux_score"] = out[list(LUXURY_FLAGS) + ["txt_stratum_6", "txt_parking_3plus"]].sum(axis=1)
+    return out
+
+
+def add_area_and_luxury(df):
+    """Columnas nuevas que no tocan las existentes: área ampliada y señales de lujo."""
+    out = df.copy()
+    text = (out["title"].fillna("") + " " + out["description"].fillna("")).str.lower()
+    return add_luxury_signals(add_extended_area(out, text), text)
+
+
 def add_landmark_distances(df):
     """Distancia en metros a cada punto de referencia."""
     out = df.copy()
@@ -191,6 +328,8 @@ def main():
         feats = add_corridor_distances(add_landmark_distances(add_structural_and_text(df)))
         if pois is not None:
             feats = add_osm_features(feats, pois)
+        # Al final, para que las columnas anteriores conserven su orden y sus valores.
+        feats = add_area_and_luxury(feats)
         drop = ["title", "description", "city", "operation_type", "property_type",
                 "surface_total", "surface_covered", "month", "year"]
         built[name] = feats.drop(columns=drop)

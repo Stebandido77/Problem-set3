@@ -52,6 +52,15 @@ EXTRA_TEXT_FEATURES = [
     "txt_service_room", "txt_drivers_room", "txt_walk_in", "txt_study", "txt_luxury",
     "txt_spa", "txt_exterior", "txt_age",
 ]
+# Tercera tanda: señales de lujo para reconocer inmuebles por encima del tope del train.
+LUXURY_FEATURES = [
+    "txt_private_terrace", "txt_private_elevator", "txt_club_house", "txt_double_height",
+    "txt_view_hills", "txt_penthouse_strict", "txt_stratum_6", "txt_parking_3plus",
+    "txt_lux_score",
+]
+# Área recuperada con más patrones de texto; reemplaza a 'surface' en los conjuntos 'lux'.
+EXTENDED_AREA = {"surface": "surface_ext", "surface_missing": "surface_ext_missing",
+                 "log_surface": "log_surface_ext"}
 COORD_FEATURES = ["lat", "lon"]
 SIMILARITY_FEATURES = STRUCTURAL_FEATURES + TEXT_FEATURES
 LANDMARK_FEATURES = [
@@ -97,6 +106,7 @@ def feature_sets(columns):
     full = STRUCTURAL_FEATURES + TEXT_FEATURES + LANDMARK_FEATURES + osm
     rich = (full + EXTRA_TEXT_FEATURES + CORRIDOR_FEATURES
             + osm_feature_names(columns, extra=True))
+    lux = [EXTENDED_AREA.get(c, c) for c in full] + LUXURY_FEATURES
     sets = {
         "base": STRUCTURAL_FEATURES,
         "base_text": STRUCTURAL_FEATURES + TEXT_FEATURES,
@@ -106,6 +116,15 @@ def feature_sets(columns):
         # 'rich' suma señales de gama alta del texto, ejes de ciudad y conteos de OSM.
         "rich": rich,
         "rich_coords": rich + COORD_FEATURES,
+        # 'lux' es 'full' con el área ampliada y las señales de lujo.
+        "lux": lux,
+        "lux_coords": lux + COORD_FEATURES,
+        # 'core' es 'full' sin OSM: los envíos 01 a 11 se subieron así a Kaggle.
+        "core": [c for c in full if c not in osm],
+        "core_coords": [c for c in full if c not in osm] + COORD_FEATURES,
+        # 'lux_core' es 'core' con el área ampliada y las señales de lujo.
+        "lux_core_coords": ([EXTENDED_AREA.get(c, c) for c in full if c not in osm]
+                            + LUXURY_FEATURES + COORD_FEATURES),
     }
     return sets
 
