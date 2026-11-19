@@ -17,6 +17,12 @@ EARTH_RADIUS_M = 6_371_000.0
 # a su puntaje público en Kaggle (180 M): con 250 m y 400 m da 182 M.
 HOLDOUT_RADIUS_M = 250
 HOLDOUT_BUFFER_M = 400
+# Holdout nororiental (el criterio actual): se valida en el train a menos de 250 m del test,
+# sin franja, y se entrena solo con inmuebles de hasta 1.000 M, imitando que el train real
+# está truncado en 1.650 M y el test quizá no. Es el esquema que reproduce el orden de los
+# cinco puntajes públicos y las diferencias entre ellos (08_calibrate_holdout.py).
+NORTHEAST_RADIUS_M = 250
+NORTHEAST_PRICE_CAP = 1.0e9
 
 # --- Rutas (plantilla del curso: document / scripts / stores / views) ---
 ROOT = Path(__file__).resolve().parents[1]
@@ -165,6 +171,35 @@ def chapinero_holdout(train, test, radius_m=HOLDOUT_RADIUS_M, buffer_m=HOLDOUT_B
     holdout = distance_to_nearest_m(train, test) < radius_m
     gap = distance_to_nearest_m(train, train[holdout]) <= buffer_m
     return np.flatnonzero(~holdout & ~gap), np.flatnonzero(holdout)
+
+
+def northeast_holdout(train, test, radius_m=NORTHEAST_RADIUS_M, buffer_m=0,
+                      price_cap=NORTHEAST_PRICE_CAP, cell_m=None, apartments_only=False):
+    """Holdout que imita el test: el train real está truncado en 1.650 M y el test no
+    necesariamente; además, el test tiene inmuebles de train muy cerca (mediana de 96 m).
+
+    Validación: inmuebles de train a menos de 'radius_m' del test (solo apartamentos si
+    'apartments_only'); con 'cell_m', solo la mitad de las celdas de ese tamaño, escogidas
+    al azar, para que la validación tenga vecinos en el entrenamiento como el test.
+    Entrenamiento: el resto, menos una franja de 'buffer_m' y, si hay 'price_cap', solo los
+    inmuebles con precio hasta ese tope (la validación conserva todos los precios).
+    Devuelve (índices de entrenamiento, índices de validación)."""
+    validation = distance_to_nearest_m(train, test) < radius_m
+    if apartments_only:
+        validation &= (train["is_house"] == 0).to_numpy()
+    if cell_m:
+        cells = (np.floor(train["lat"] * 111_320 / cell_m).astype(int).astype(str) + "_"
+                 + np.floor(train["lon"] * 111_000 / cell_m).astype(int).astype(str))
+        unique_cells = np.unique(cells[validation])
+        chosen = np.random.default_rng(SEED).choice(unique_cells, len(unique_cells) // 2,
+                                                    replace=False)
+        validation &= cells.isin(chosen).to_numpy()
+    fit = ~validation
+    if buffer_m:
+        fit &= distance_to_nearest_m(train, train[validation]) > buffer_m
+    if price_cap:
+        fit &= (train[TARGET] <= price_cap).to_numpy()
+    return np.flatnonzero(fit), np.flatnonzero(validation)
 
 
 def error_summary(y_true, y_pred):
