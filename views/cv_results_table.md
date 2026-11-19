@@ -53,3 +53,5 @@ Cifras en millones de pesos.
 | `55_ensemble_mean_2` | – | – | – | – | 158.5 | -70.3 | 45% |
 | `56_ensemble_mean_3` | – | – | – | – | 160.4 | -82.7 | 41% |
 | `61_en_boosting_lux_core_coords_residual_q65` | 41 | – | – | – | 157.2 | -51.5 | 48% |
+| `62_boosting_core_coords_by_type_level_trunc_up` | 32 | – | – | – | 164.7 | -92.7 | 38% |
+| `63_ensemble_mean_2` | – | – | – | – | 157.7 | -72.5 | 44% |
