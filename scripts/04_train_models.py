@@ -79,7 +79,12 @@ SPECS = [
     # Idea 5: hiperparámetros sintonizados con validación espacial (05_tune_models.py).
     Spec("cart", "full", "tuned", tuned=True),
     Spec("neural_net", "full", "tuned", tuned=True),
+    Spec("boosting", "full_coords", "by_type_per_m2_tuned", target="per_m2", by_type=True,
+         tuned=True),
+    Spec("random_forest", "full", "by_type_per_m2_tuned", target="per_m2", by_type=True,
+         tuned=True),
 ]
+# Los números 30 en adelante son ensambles de 06_ensemble.py.
 
 
 def fit_predict(spec, params, X_fit, y_fit, X_pred, weights=None):
