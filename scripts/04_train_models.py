@@ -15,7 +15,9 @@ Uso:
 """
 
 import argparse
+import os
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import numpy as np
@@ -36,6 +38,7 @@ class Spec:
     target: str = "log"      # 'log', 'level' o 'per_m2' (ver models.build_model)
     weighted: bool = False   # pondera el entrenamiento por parecido al test
     by_type: bool = False    # modelo aparte para apartamentos y para casas
+    tuned: bool = False      # usa los hiperparámetros de 05_tune_models.py
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -109,7 +112,8 @@ def main():
         start = time.time()
         name = spec.name(number)
         features = sets[spec.features]
-        params = best_params.get(f"{spec.family}_{spec.features}", {})
+        key = f"{spec.family}_{spec.features}"
+        params = best_params.get(key, {}) if spec.tuned else {}
         w = weights if spec.weighted else None
 
         row = {"model": name, "family": spec.family, "features": spec.features,
@@ -139,17 +143,35 @@ def main():
         save_results(row, oof_table[[ID_COL, TARGET] + spec_columns], test_table[[ID_COL, name]])
 
 
+@contextmanager
+def results_lock():
+    """Candado de archivo: dos corridas simultáneas no escriben las tablas a la vez."""
+    lock = PROCESSED_DIR / "results.lock"
+    while True:
+        try:
+            handle = os.open(lock, os.O_CREAT | os.O_EXCL)
+            break
+        except FileExistsError:
+            time.sleep(1)
+    try:
+        yield
+    finally:
+        os.close(handle)
+        os.remove(lock)
+
+
 def save_results(row, oof_part, test_part):
     """Actualiza la tabla de resultados y las predicciones guardadas de una especificación;
     las demás especificaciones conservan su resultado anterior."""
     VIEWS_DIR.mkdir(exist_ok=True)
     results_path = VIEWS_DIR / "cv_results.csv"
-    update_table(results_path, pd.DataFrame([row]), "rows").sort_values("model").to_csv(
-        results_path, index=False)
-    for table, file in [(oof_part, "oof_predictions.csv"),
-                        (test_part, "test_predictions.csv")]:
-        path = PROCESSED_DIR / file
-        update_table(path, table, "columns").to_csv(path, index=False)
+    with results_lock():
+        update_table(results_path, pd.DataFrame([row]), "rows").sort_values(
+            "model").to_csv(results_path, index=False)
+        for table, file in [(oof_part, "oof_predictions.csv"),
+                            (test_part, "test_predictions.csv")]:
+            path = PROCESSED_DIR / file
+            update_table(path, table, "columns").to_csv(path, index=False)
 
 
 if __name__ == "__main__":
