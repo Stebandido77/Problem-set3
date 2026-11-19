@@ -5,10 +5,18 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMClassifier
 from sklearn.cluster import KMeans
-from sklearn.model_selection import GroupKFold, KFold
+from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold
+from sklearn.neighbors import BallTree
 
 SEED = 4107
+EARTH_RADIUS_M = 6_371_000.0
+# Holdout tipo Chapinero: radio alrededor del test y franja excluida del entrenamiento.
+# Calibrados para que el mejor envío sin OSM (boosting con coordenadas) dé un MAE cercano
+# a su puntaje público en Kaggle (180 M): con 250 m y 400 m da 182 M.
+HOLDOUT_RADIUS_M = 250
+HOLDOUT_BUFFER_M = 400
 
 # --- Rutas (plantilla del curso: document / scripts / stores / views) ---
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +42,7 @@ TEXT_FEATURES = [
     "txt_stratum", "txt_floor", "txt_desc_length",
 ]
 COORD_FEATURES = ["lat", "lon"]
+SIMILARITY_FEATURES = STRUCTURAL_FEATURES + TEXT_FEATURES
 LANDMARK_FEATURES = [
     "dist_zona_t_m", "dist_parque_93_m", "dist_centro_internacional_m",
     "dist_plaza_bolivar_m",
@@ -98,6 +107,51 @@ def spatial_cv_splits(df, n_splits=5, n_clusters=10):
     imitando el salto del resto de Bogotá a Chapinero."""
     groups = spatial_groups(df, n_clusters)
     return list(GroupKFold(n_splits=n_splits).split(df, groups=groups))
+
+
+def distance_to_nearest_m(points, reference):
+    """Distancia en metros de cada fila de 'points' al punto más cercano de 'reference'."""
+    tree = BallTree(np.radians(reference[["lat", "lon"]].to_numpy()), metric="haversine")
+    distance, _ = tree.query(np.radians(points[["lat", "lon"]].to_numpy()), k=1)
+    return distance[:, 0] * EARTH_RADIUS_M
+
+
+def test_similarity(train, test):
+    """Probabilidad fuera de muestra de que cada fila de train 'parezca' del test, según un
+    clasificador train-contra-test. No usa coordenadas (separan casi perfecto: AUC ~1),
+    así que mide parecido en tipo, tamaño y texto del anuncio. No usa el precio."""
+    columns = SIMILARITY_FEATURES
+    X = pd.concat([train[columns], test[columns]], ignore_index=True)
+    is_test = np.r_[np.zeros(len(train)), np.ones(len(test))]
+    proba = np.zeros(len(X))
+    folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+    for fit_idx, pred_idx in folds.split(X, is_test):
+        clf = LGBMClassifier(n_estimators=300, learning_rate=0.05, num_leaves=31,
+                             random_state=SEED, verbose=-1)
+        clf.fit(X.iloc[fit_idx], is_test[fit_idx])
+        proba[pred_idx] = clf.predict_proba(X.iloc[pred_idx])[:, 1]
+    return proba[:len(train)]
+
+
+def similarity_weights(similarity, cap_quantile=0.99):
+    """Pesos de importancia p / (1 - p) a partir del parecido al test, recortados en el
+    percentil 99 para que pocas filas no dominen, y normalizados a media 1."""
+    p = np.clip(np.asarray(similarity, dtype=float), 1e-3, 1 - 1e-3)
+    odds = p / (1 - p)
+    odds = np.minimum(odds, np.quantile(odds, cap_quantile))
+    return odds / odds.mean()
+
+
+def chapinero_holdout(train, test, radius_m=HOLDOUT_RADIUS_M, buffer_m=HOLDOUT_BUFFER_M):
+    """Partición única que imita el salto a Chapinero.
+
+    Validación: inmuebles de train a menos de 'radius_m' de algún inmueble del test.
+    Entrenamiento: el resto de train, menos una franja de 'buffer_m' alrededor de la
+    validación, para que el modelo no aprenda de los vecinos inmediatos (como pasa con el
+    interior de Chapinero). Devuelve (índices de entrenamiento, índices de validación)."""
+    holdout = distance_to_nearest_m(train, test) < radius_m
+    gap = distance_to_nearest_m(train, train[holdout]) <= buffer_m
+    return np.flatnonzero(~holdout & ~gap), np.flatnonzero(holdout)
 
 
 def error_summary(y_true, y_pred):

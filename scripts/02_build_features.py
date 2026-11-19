@@ -10,10 +10,9 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
 
-from utils import (ID_COL, OSM_POIS_PATH, PROCESSED_DIR, TARGET, haversine_m,
-                   load_raw)
+from utils import (EARTH_RADIUS_M, ID_COL, OSM_POIS_PATH, PROCESSED_DIR, TARGET,
+                   haversine_m, load_raw, test_similarity)
 
-EARTH_RADIUS_M = 6_371_000.0
 COUNT_RADIUS_M = 500
 # Categorías densas: además de la distancia, cuántas hay a 500 m (densidad de servicios).
 COUNT_CATEGORIES = ["restaurant", "bar", "bank", "park", "school"]
@@ -142,16 +141,20 @@ def main():
               "Corra primero scripts/01_download_osm.py.")
 
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    built = {}
     for name, df in [("train", train), ("test", test)]:
         feats = add_landmark_distances(add_structural_and_text(df))
         if pois is not None:
             feats = add_osm_features(feats, pois)
         drop = ["title", "description", "city", "operation_type", "property_type",
                 "surface_total", "surface_covered", "month", "year"]
-        feats = feats.drop(columns=drop)
+        built[name] = feats.drop(columns=drop)
+    # Parecido al test (no es predictor): sirve para ponderar el entrenamiento.
+    built["train"]["test_similarity"] = test_similarity(built["train"], built["test"])
+    for name, feats in built.items():
         feats.to_csv(PROCESSED_DIR / f"{name}_features.csv", index=False)
         print(f"{name}: {feats.shape[0]} filas, {feats.shape[1]} columnas")
-    summary = feats.drop(columns=[ID_COL, TARGET]).isna().mean()
+    summary = built["test"].drop(columns=[ID_COL, TARGET]).isna().mean()
     print("Faltantes en test:\n", summary[summary > 0].round(3).to_string())
 
 
