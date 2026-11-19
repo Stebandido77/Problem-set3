@@ -22,11 +22,16 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 
 from models import FAMILIES, build_model, fit_model, load_best_params
 from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, chapinero_holdout,
                    error_summary, feature_sets, load_processed, random_cv, save_submission,
                    similarity_weights, spatial_cv_splits)
+
+
+# Familias que usan un solo núcleo: conviene ajustar sus particiones en paralelo.
+SINGLE_CORE_FAMILIES = {"linear", "elastic_net", "cart", "neural_net"}
 
 
 @dataclass(frozen=True)
@@ -82,12 +87,16 @@ def fit_predict(spec, params, X_fit, y_fit, X_pred, weights=None):
 
 
 def evaluate(spec, params, X, y, splits, weights=None):
-    """Predicciones para las filas de validación de cada partición (NaN en el resto)."""
+    """Predicciones para las filas de validación de cada partición (NaN en el resto).
+    Las familias de un solo núcleo ajustan sus particiones en paralelo."""
+    n_jobs = len(splits) if spec.family in SINGLE_CORE_FAMILIES else 1
+    fold_preds = Parallel(n_jobs=n_jobs)(
+        delayed(fit_predict)(spec, params, X.iloc[fit_idx], y.iloc[fit_idx], X.iloc[val_idx],
+                             None if weights is None else weights[fit_idx])
+        for fit_idx, val_idx in splits)
     pred = np.full(len(X), np.nan)
-    for fit_idx, val_idx in splits:
-        w = None if weights is None else weights[fit_idx]
-        pred[val_idx] = fit_predict(spec, params, X.iloc[fit_idx], y.iloc[fit_idx],
-                                    X.iloc[val_idx], w)
+    for (_, val_idx), fold_pred in zip(splits, fold_preds):
+        pred[val_idx] = fold_pred
     return pred
 
 
