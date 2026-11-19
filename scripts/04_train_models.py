@@ -64,6 +64,10 @@ SPECS = [
     # Idea 2: modelo aparte para apartamentos (97 % del test) y para casas.
     Spec("boosting", "full_coords", "by_type", by_type=True),
     Spec("random_forest", "full", "by_type", by_type=True),
+    # Idea 3: objetivo alternativo. Precio en nivel con pérdida L1 y precio por m2.
+    Spec("boosting", "full_coords", "by_type_level", target="level", by_type=True),
+    Spec("boosting", "full_coords", "by_type_per_m2", target="per_m2", by_type=True),
+    Spec("random_forest", "full", "by_type_per_m2", target="per_m2", by_type=True),
 ]
 
 
