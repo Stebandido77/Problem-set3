@@ -2,8 +2,9 @@
 
 Cada entrada define (i) el estimador con hiperparámetros iniciales razonables y
 (ii) la distribución de búsqueda que usa 05_tune_models.py.
-Todos los modelos se entrenan sobre log(precio) y predicen en pesos: con MAE como
+Por defecto los modelos se entrenan sobre log(precio) y predicen en pesos: con MAE como
 métrica conviene apuntar a la mediana, y el logaritmo reduce el peso de la cola derecha.
+Como alternativas hay precio en nivel y log(precio por m2) cuando se conoce el área.
 """
 
 import json
@@ -11,6 +12,7 @@ import json
 import numpy as np
 from lightgbm import LGBMRegressor
 from scipy.stats import loguniform, randint, uniform
+from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
@@ -34,18 +36,103 @@ def log_target(regressor):
     return TransformedTargetRegressor(regressor=regressor, func=np.log, inverse_func=np.exp)
 
 
-def build_model(family, params=None):
-    """Devuelve el estimador de una familia; 'params' sobrescribe los valores iniciales."""
+def level_target(regressor):
+    """Entrena directamente sobre el precio en pesos (sin transformar)."""
+    return TransformedTargetRegressor(regressor=regressor)
+
+
+def fit_model(model, X, y, weights=None):
+    """Ajusta un modelo con pesos de muestra opcionales, sin importar cómo esté envuelto."""
+    if weights is None:
+        return model.fit(X, y)
+    if isinstance(model, TransformedTargetRegressor):
+        last_step = model.regressor.steps[-1][0]
+        return model.fit(X, y, **{f"{last_step}__sample_weight": weights})
+    return model.fit(X, y, sample_weight=weights)
+
+
+class PricePerSquareMeter(RegressorMixin, BaseEstimator):
+    """Predice log(precio por m2) cuando hay área y lo multiplica por el área.
+    Los inmuebles sin área usan un modelo de respaldo sobre log(precio)."""
+
+    def __init__(self, per_m2, fallback, surface_col="surface"):
+        self.per_m2 = per_m2
+        self.fallback = fallback
+        self.surface_col = surface_col
+
+    def fit(self, X, y, sample_weight=None):
+        has_area = X[self.surface_col].notna().to_numpy()
+        y = np.asarray(y, dtype=float)
+        w = None if sample_weight is None else np.asarray(sample_weight)[has_area]
+        self.per_m2_ = fit_model(clone(self.per_m2), X[has_area],
+                                 y[has_area] / X.loc[has_area, self.surface_col], w)
+        self.fallback_ = fit_model(clone(self.fallback), X, y, sample_weight)
+        return self
+
+    def predict(self, X):
+        pred = self.fallback_.predict(X)
+        has_area = X[self.surface_col].notna().to_numpy()
+        if has_area.any():
+            pred[has_area] = (self.per_m2_.predict(X[has_area])
+                              * X.loc[has_area, self.surface_col].to_numpy())
+        return pred
+
+
+class ByPropertyType(RegressorMixin, BaseEstimator):
+    """Un modelo para apartamentos y otro para casas (el test es 97 % apartamentos)."""
+
+    def __init__(self, model, type_col="is_house"):
+        self.model = model
+        self.type_col = type_col
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        self.models_ = {}
+        for kind in (0, 1):
+            rows = (X[self.type_col] == kind).to_numpy()
+            w = None if sample_weight is None else np.asarray(sample_weight)[rows]
+            self.models_[kind] = fit_model(clone(self.model), X[rows], y[rows], w)
+        return self
+
+    def predict(self, X):
+        pred = np.zeros(len(X))
+        for kind, model in self.models_.items():
+            rows = (X[self.type_col] == kind).to_numpy()
+            if rows.any():
+                pred[rows] = model.predict(X[rows])
+        return pred
+
+
+def build_model(family, params=None, target="log", by_type=False):
+    """Devuelve el estimador de una familia.
+
+    params: sobrescribe los hiperparámetros iniciales (rutas 'regressor__<paso>__<param>').
+    target: 'log' (log del precio), 'level' (precio en pesos) o 'per_m2' (log del precio
+            por m2 cuando hay área, con respaldo en log del precio).
+    by_type: si es True, ajusta un modelo aparte para apartamentos y otro para casas."""
     params = params or {}
+    if target == "per_m2":
+        model = PricePerSquareMeter(build_model(family, params), build_model(family, params))
+    else:
+        steps = family_pipeline(family)
+        model = log_target(steps) if target == "log" else level_target(steps)
+        model.set_params(**params)
+    return ByPropertyType(model) if by_type else model
+
+
+def family_pipeline(family):
+    """Pipeline de preprocesamiento + estimador con los hiperparámetros iniciales."""
     if family == "linear":
         steps = make_pipeline(impute(), StandardScaler(), LinearRegression())
     elif family == "elastic_net":
         # Interacciones de segundo orden: el elastic net decide cuáles sobreviven.
+        # tol=1e-3 corta el tiempo de ajuste a la mitad sin mover el MAE.
         steps = make_pipeline(
             impute(), StandardScaler(),
             PolynomialFeatures(degree=2, interaction_only=True, include_bias=False),
             StandardScaler(),
-            ElasticNet(alpha=0.003, l1_ratio=0.5, max_iter=5000, random_state=SEED),
+            ElasticNet(alpha=0.003, l1_ratio=0.5, max_iter=5000, tol=1e-3,
+                       random_state=SEED),
         )
     elif family == "cart":
         steps = make_pipeline(
@@ -75,9 +162,7 @@ def build_model(family, params=None):
         )
     else:
         raise ValueError(f"Familia desconocida: {family}")
-    model = log_target(steps)
-    model.set_params(**params)
-    return model
+    return steps
 
 
 # Espacios de búsqueda aleatoria. El prefijo es la ruta del parámetro dentro del pipeline.
