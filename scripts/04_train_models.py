@@ -76,6 +76,9 @@ SPECS = [
     # Idea 4: predictores de gama alta del texto, ejes de ciudad y conteos de OSM a 300 m y 1 km.
     Spec("boosting", "rich_coords", "by_type_per_m2", target="per_m2", by_type=True),
     Spec("random_forest", "rich", "by_type_per_m2", target="per_m2", by_type=True),
+    # Idea 5: hiperparámetros sintonizados con validación espacial (05_tune_models.py).
+    Spec("cart", "full", "tuned", tuned=True),
+    Spec("neural_net", "full", "tuned", tuned=True),
 ]
 
 
