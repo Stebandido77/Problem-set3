@@ -111,13 +111,29 @@ def error_summary(y_true, y_pred):
     }
 
 
+def submission_path(out, name):
+    """Ruta libre para un envío. Un envío ya escrito no se sobrescribe: si el contenido
+    cambió, se guarda como <name>_v2, <name>_v3...; si es idéntico, se reutiliza."""
+    candidates = [SUBMISSIONS_DIR / f"{name}.csv"]
+    candidates += [SUBMISSIONS_DIR / f"{name}_v{k}.csv" for k in range(2, 100)]
+    for path in candidates:
+        if not path.exists():
+            return path
+        existing = pd.read_csv(path)
+        if (list(existing[ID_COL]) == list(out[ID_COL])
+                and np.array_equal(existing[TARGET].to_numpy(float), out[TARGET].to_numpy(float))):
+            return path
+    raise RuntimeError(f"Demasiadas versiones de {name}")
+
+
 def save_submission(ids, predictions, name):
-    """Escribe un envío en el formato de Kaggle (property_id, price)."""
+    """Escribe un envío en el formato de Kaggle (property_id, price) y devuelve su ruta."""
     SUBMISSIONS_DIR.mkdir(parents=True, exist_ok=True)
     out = pd.DataFrame({ID_COL: ids, TARGET: np.round(predictions, 0)})
     template = pd.read_csv(RAW_DIR / "submission_template.csv")
     assert list(out[ID_COL]) == list(template[ID_COL]), "El orden de ids no coincide"
     assert out[TARGET].notna().all() and (out[TARGET] > 0).all()
-    path = SUBMISSIONS_DIR / f"{name}.csv"
-    out.to_csv(path, index=False)
+    path = submission_path(out, name)
+    if not path.exists():
+        out.to_csv(path, index=False)
     return path
