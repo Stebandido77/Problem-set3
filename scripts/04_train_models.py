@@ -24,11 +24,22 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from models import FAMILIES, build_model, fit_model, load_best_params
-from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, chapinero_holdout,
-                   error_summary, feature_sets, load_processed, random_cv, save_submission,
-                   similarity_weights, spatial_cv_splits)
+from models import (FAMILIES, ImputedArea, NeighborhoodLevel, PriceWeighted,
+                    ResidualBoosting, SyntheticTail, TruncationCorrection, build_model,
+                    fit_model, load_best_params)
+from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR,
+                   chapinero_holdout, error_summary, feature_sets, load_processed,
+                   northeast_holdout, random_cv, save_submission, similarity_weights,
+                   spatial_cv_splits)
 
+
+# Esquemas de validación: nombre -> función (train, test) -> lista de particiones.
+SCHEMES = {
+    "random": lambda train, test: list(random_cv().split(train)),
+    "spatial": lambda train, test: spatial_cv_splits(train),
+    "chapinero": lambda train, test: [chapinero_holdout(train, test)],
+    "northeast": lambda train, test: [northeast_holdout(train, test)],
+}
 
 # Familias que usan un solo núcleo: conviene ajustar sus particiones en paralelo.
 SINGLE_CORE_FAMILIES = {"linear", "elastic_net", "cart", "neural_net"}
@@ -44,10 +55,30 @@ class Spec:
     weighted: bool = False   # pondera el entrenamiento por parecido al test
     by_type: bool = False    # modelo aparte para apartamentos y para casas
     tuned: bool = False      # usa los hiperparámetros de 05_tune_models.py
+    params: tuple = ()       # hiperparámetros fijos, como pares (ruta, valor)
+    neighbors: bool = False  # agrega el nivel de precio de los vecinos (NeighborhoodLevel)
+    price_weight: float = 0  # peso máximo por decil de precio (PriceWeighted); 0 = sin pesos
+    synthetic: bool = False  # sintéticos tipo SMOTER de la cola alta (SyntheticTail)
+    impute_area: bool = False  # completa el área faltante con un modelo (ImputedArea)
+    truncation: bool = False   # corrige por el truncamiento del precio (TruncationCorrection)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
         return f"{number:02d}_{self.family}_{self.features}{suffix}"
+
+
+# Hiperparámetros fijos de algunas variantes (rutas dentro de build_model).
+L2_LOSS = (("regressor__lgbmregressor__objective", "l2"),)
+
+
+# En el híbrido, el boosting de residuos es un pipeline simple (sin 'regressor__').
+RESIDUAL_Q60 = (("lgbmregressor__objective", "quantile"), ("lgbmregressor__alpha", 0.60))
+RESIDUAL_Q65 = (("lgbmregressor__objective", "quantile"), ("lgbmregressor__alpha", 0.65))
+
+
+def quantile_loss(alpha):
+    return (("regressor__lgbmregressor__objective", "quantile"),
+            ("regressor__lgbmregressor__alpha", alpha))
 
 
 # El orden cuenta la historia: de simple a complejo. Un número nunca se reutiliza.
@@ -86,12 +117,103 @@ SPECS = [
     Spec("random_forest", "full", "by_type_per_m2_tuned", target="per_m2", by_type=True,
          tuned=True),
 ]
-# Los números 30 en adelante son ensambles de 06_ensemble.py.
+# Los números 30 a 32 son ensambles de 06_ensemble.py y la versión x1,15 del envío 10.
+
+# Ronda 2, desde el 33. Criterio: holdout nororiental (train hasta 1.000 M, ver utils).
+ROUND_2_START = 33
+ROUND_2 = [
+    # 2b. Elastic net en área, baños y ubicación, con boosting sobre sus residuos.
+    Spec("en_boosting", "full_coords", "residual"),
+    # 2c. Precio en nivel con pérdida cuadrática (frente a log en 14 y L1 en 16).
+    Spec("boosting", "full_coords", "by_type_level_l2", target="level", by_type=True,
+         params=L2_LOSS),
+    # 3. Área ampliada y señales de lujo del texto; luego, área faltante imputada con modelo.
+    Spec("boosting", "lux_coords", "by_type_per_m2", target="per_m2", by_type=True),
+    Spec("boosting", "lux_coords", "by_type_per_m2_imputed", target="per_m2", by_type=True,
+         impute_area=True),
+    # 4. Nivel de precio de los 20 vecinos más cercanos, calculado dentro de cada ajuste.
+    Spec("boosting", "full_coords", "by_type_per_m2_nbr", target="per_m2", by_type=True,
+         neighbors=True),
+    Spec("random_forest", "full", "by_type_per_m2_nbr", target="per_m2", by_type=True,
+         neighbors=True),
+    # 5. Rebalanceo hacia la cola alta, sobre la mejor variante (precio en nivel, 16).
+    Spec("boosting", "full_coords", "by_type_level_pw3", target="level", by_type=True,
+         price_weight=3),
+    Spec("random_forest", "full", "by_type_per_m2_pw3", target="per_m2", by_type=True,
+         price_weight=3),
+    Spec("boosting", "full_coords", "by_type_level_q55", target="level", by_type=True,
+         params=quantile_loss(0.55)),
+    Spec("boosting", "full_coords", "by_type_level_q60", target="level", by_type=True,
+         params=quantile_loss(0.60)),
+    Spec("boosting", "full_coords", "by_type_level_q65", target="level", by_type=True,
+         params=quantile_loss(0.65)),
+    Spec("boosting", "full_coords", "by_type_level_smoter", target="level", by_type=True,
+         synthetic=True),
+    # Sin OSM: en el holdout nororiental el boosting 10 sin OSM (el subido) le gana al con OSM.
+    Spec("boosting", "core_coords", "by_type_level", target="level", by_type=True),
+    # 5d. Corrección por truncamiento: de la mediana truncada a la mediana sin truncar.
+    Spec("boosting", "full_coords", "by_type_level_trunc", target="level", by_type=True,
+         truncation=True),
+    Spec("random_forest", "full", "by_type_per_m2_trunc", target="per_m2", by_type=True,
+         truncation=True),
+    Spec("boosting", "core_coords", "by_type_level_trunc", target="level", by_type=True,
+         truncation=True),
+    # 6. Combinaciones de lo que funcionó: híbrido lineal + boosting, sin OSM, cuantil 0,6
+    # y corrección por truncamiento.
+    Spec("en_boosting", "core_coords", "residual"),
+    Spec("en_boosting", "full_coords", "residual_q60", params=RESIDUAL_Q60),
+    Spec("en_boosting", "core_coords", "residual_q60", params=RESIDUAL_Q60),
+    Spec("en_boosting", "core_coords", "residual_trunc", truncation=True),
+    Spec("boosting", "core_coords", "by_type_level_q65", target="level", by_type=True,
+         params=quantile_loss(0.65)),
+    Spec("en_boosting", "core_coords", "residual_q65", params=RESIDUAL_Q65),
+]
+# Los números 55 a 60 son ensambles (06_ensemble.py) y versiones escaladas (09).
+ROUND_2B_START = 61
+ROUND_2B = [
+    # 7. Señales de lujo y área ampliada dentro de la parte lineal del híbrido.
+    Spec("en_boosting", "lux_core_coords", "residual_q65", params=RESIDUAL_Q65),
+]
+# Número de envío -> especificación.
+NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
+                  **dict(enumerate(ROUND_2, start=ROUND_2_START)),
+                  **dict(enumerate(ROUND_2B, start=ROUND_2B_START))}
+
+
+def build_spec_model(spec, params):
+    """Modelo de una especificación con sus envoltorios (vecinos, pesos, sintéticos)."""
+    params = {**params, **dict(spec.params)}
+    # Los conjuntos 'lux' usan el área ampliada con más patrones de texto.
+    surface_col = "surface_ext" if spec.features.startswith("lux") else "surface"
+    if spec.family == "en_boosting":
+        model = ResidualBoosting(params, luxury=spec.features.startswith("lux"))
+    else:
+        model = build_model(spec.family, params, spec.target, spec.by_type, surface_col)
+    if spec.impute_area:
+        model = ImputedArea(model, surface_col)
+    if spec.synthetic:
+        model = SyntheticTail(model)
+    if spec.price_weight:
+        model = PriceWeighted(model, spec.price_weight)
+    if spec.truncation:
+        model = TruncationCorrection(model)
+    if spec.neighbors:
+        model = NeighborhoodLevel(model, drop_coords="coords" not in spec.features,
+                                  surface_col=surface_col)
+    return model
+
+
+def spec_features(spec, sets):
+    """Predictores de una especificación; los vecinos necesitan lat/lon para buscarse."""
+    features = sets[spec.features]
+    if spec.neighbors:
+        features = features + [c for c in COORD_FEATURES if c not in features]
+    return features
 
 
 def fit_predict(spec, params, X_fit, y_fit, X_pred, weights=None):
     """Ajusta una copia del modelo y predice."""
-    model = build_model(spec.family, params, spec.target, spec.by_type)
+    model = build_spec_model(spec, params)
     fit_model(model, X_fit, y_fit, weights)
     return model.predict(X_pred)
 
@@ -118,13 +240,21 @@ def update_table(path, new, key):
     if key == "columns":
         keep = [c for c in previous.columns if c not in new.columns]
         return pd.concat([new, previous[keep]], axis=1)
-    return pd.concat([previous[~previous["model"].isin(new["model"])], new])
+    # Una fila repetida conserva los valores anteriores de los esquemas que no se corrieron.
+    repeated = previous["model"].isin(new["model"])
+    merged = new.set_index("model").combine_first(previous[repeated].set_index("model"))
+    return pd.concat([previous[~repeated], merged.reset_index()])
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--families", nargs="+", default=FAMILIES, choices=FAMILIES)
+    families = FAMILIES + ["en_boosting"]  # el híbrido de 33 combina dos familias
+    parser.add_argument("--families", nargs="+", default=families, choices=families)
     parser.add_argument("--specs", nargs="+", type=int, help="números de SPECS a correr")
+    parser.add_argument("--schemes", nargs="+", default=list(SCHEMES), choices=list(SCHEMES),
+                        help="esquemas de validación; los demás conservan su resultado")
+    parser.add_argument("--no-submission", action="store_true",
+                        help="no reentrena con todo el train ni escribe el envío")
     args = parser.parse_args()
 
     train, test = load_processed()
@@ -132,18 +262,17 @@ def main():
     sets = feature_sets(train.columns)
     best_params = load_best_params()
     weights = similarity_weights(train["test_similarity"])
-    schemes = {"random": list(random_cv().split(train)),
-               "spatial": spatial_cv_splits(train),
-               "chapinero": [chapinero_holdout(train, test)]}
+    schemes = {scheme: make_splits(train, test) for scheme, make_splits in SCHEMES.items()
+               if scheme in args.schemes}
 
     oof_table = train[[ID_COL, TARGET]].copy()
     test_table = test[[ID_COL]].copy()
-    for number, spec in enumerate(SPECS, start=1):
+    for number, spec in NUMBERED_SPECS.items():
         if spec.family not in args.families or (args.specs and number not in args.specs):
             continue
         start = time.time()
         name = spec.name(number)
-        features = sets[spec.features]
+        features = spec_features(spec, sets)
         key = f"{spec.family}_{spec.features}"
         params = best_params.get(key, {}) if spec.tuned else {}
         w = weights if spec.weighted else None
@@ -161,18 +290,21 @@ def main():
             row[f"share_over_{scheme}"] = summary["share_overpredicted"]
 
         # Ajuste final con todo el entrenamiento y envío a Kaggle.
-        test_pred = fit_predict(spec, params, train[features], y, test[features], w)
-        test_table[name] = test_pred
-        row["submission"] = save_submission(test[ID_COL], test_pred, name).name
+        test_columns = [ID_COL]
+        if not args.no_submission:
+            test_pred = fit_predict(spec, params, train[features], y, test[features], w)
+            test_table[name] = test_pred
+            test_columns.append(name)
+            row["submission"] = save_submission(test[ID_COL], test_pred, name).name
+            row["test_mean"], row["test_p95"], row["test_max"] = (
+                test_pred.mean(), np.quantile(test_pred, 0.95), test_pred.max())
         row["minutes"] = (time.time() - start) / 60
-        print(f"{name:<40} MAE aleatoria {row['mae_random']/1e6:6.1f} M | "
-              f"espacial {row['mae_spatial']/1e6:6.1f} M | "
-              f"chapinero {row['mae_chapinero']/1e6:6.1f} M "
-              f"(sesgo {row['bias_chapinero']/1e6:+6.1f}) | {row['minutes']:.1f} min",
-              flush=True)
+        print(f"{name:<40} " + " | ".join(
+            f"{scheme} {row[f'mae_{scheme}']/1e6:6.1f} M (sesgo {row[f'bias_{scheme}']/1e6:+.1f})"
+            for scheme in schemes) + f" | {row['minutes']:.1f} min", flush=True)
         # Se guarda tras cada especificación: si una corrida se corta, no se pierde lo hecho.
         spec_columns = [c for c in oof_table if c.startswith(f"{name}__")]
-        save_results(row, oof_table[[ID_COL, TARGET] + spec_columns], test_table[[ID_COL, name]])
+        save_results(row, oof_table[[ID_COL, TARGET] + spec_columns], test_table[test_columns])
 
 
 @contextmanager

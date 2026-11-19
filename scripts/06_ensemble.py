@@ -19,7 +19,7 @@ import pandas as pd
 from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, error_summary,
                    save_submission)
 
-SCHEMES = ["random", "spatial", "chapinero"]
+SCHEMES = ["random", "spatial", "chapinero", "northeast"]
 
 
 def combine(frame, how):
@@ -43,7 +43,10 @@ def main():
     row = {"model": name, "family": "ensemble", "features": "+".join(args.models),
            "n_features": np.nan, "tuned": False}
     for scheme in SCHEMES:
-        pred = combine(oof[[f"{m}__{scheme}" for m in args.models]], args.how)
+        columns = [f"{m}__{scheme}" for m in args.models]
+        if not set(columns) <= set(oof.columns):
+            continue  # algún componente no se evaluó con este esquema
+        pred = combine(oof[columns], args.how)
         rows = pred.notna()
         summary = error_summary(oof.loc[rows, TARGET], pred[rows])
         row[f"mae_{scheme}"] = summary["mae"]
@@ -51,12 +54,13 @@ def main():
         row[f"share_over_{scheme}"] = summary["share_overpredicted"]
     final = combine(test_pred[args.models], args.how)
     row["submission"] = save_submission(test_pred[ID_COL], final, name).name
+    row["test_mean"], row["test_p95"], row["test_max"] = (
+        final.mean(), final.quantile(0.95), final.max())
 
     results = pd.concat([results[results["model"] != name], pd.DataFrame([row])])
     results.sort_values("model").to_csv(results_path, index=False)
-    print(f"{name}: aleatoria {row['mae_random']/1e6:.1f} M | espacial "
-          f"{row['mae_spatial']/1e6:.1f} M | chapinero {row['mae_chapinero']/1e6:.1f} M "
-          f"(sesgo {row['bias_chapinero']/1e6:+.1f}) -> {row['submission']}")
+    print(f"{name}: " + " | ".join(f"{s} {row[f'mae_{s}'] / 1e6:.1f} M" for s in SCHEMES
+                                   if f"mae_{s}" in row) + f" -> {row['submission']}")
 
 
 if __name__ == "__main__":
