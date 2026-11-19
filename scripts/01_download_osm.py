@@ -47,9 +47,9 @@ CATEGORIES = {
 }
 
 
-def build_query(filters):
+def build_query(filters, bbox=BBOX):
     """Consulta Overpass QL: nodos, vías y relaciones; 'out center' da un punto por objeto."""
-    south, west, north, east = BBOX
+    south, west, north, east = bbox
     body = "".join(f"nwr{f}({south},{west},{north},{east});" for f in filters)
     return f"[out:json][timeout:180];({body});out center;"
 
@@ -62,6 +62,24 @@ def parse_elements(elements, category):
         if point:
             rows.append({"category": category, "lat": point["lat"], "lon": point["lon"]})
     return rows
+
+
+def split_bbox(bbox):
+    """Parte la caja en mitad sur y mitad norte."""
+    south, west, north, east = bbox
+    middle = (south + north) / 2
+    return [(south, west, middle, east), (middle, west, north, east)]
+
+
+def fetch_category(filters, retries=2):
+    """Descarga una categoría; si la caja completa falla, la pide en dos mitades
+    (consultas más pequeñas que los servidores saturados sí alcanzan a responder)."""
+    try:
+        return fetch(build_query(filters), retries)
+    except RuntimeError as error:
+        print(f"  caja completa falló; se parte en dos mitades\n  {error}", flush=True)
+    halves = split_bbox(BBOX)
+    return [el for half in halves for el in fetch(build_query(filters, half), retries)]
 
 
 def fetch(query, retries=4):
@@ -77,7 +95,7 @@ def fetch(query, retries=4):
             except Exception as error:  # red caída, límite de uso, respuesta no JSON
                 errors.append(f"{url.split('/')[2]}: {error}")
         wait = 30 * (attempt + 1)
-        print(f"  ningún servidor respondió; reintento en {wait} s")
+        print(f"  ningún servidor respondió; reintento en {wait} s", flush=True)
         time.sleep(wait)
     raise RuntimeError("Overpass no respondió:\n  " + "\n  ".join(errors[-len(OVERPASS_URLS):]))
 
@@ -99,7 +117,7 @@ def main():
             print(f"{category:<16} sin descargar: queda por fuera", flush=True)
             continue
         else:
-            rows = parse_elements(fetch(build_query(filters)), category)
+            rows = parse_elements(fetch_category(filters), category)
             frame = pd.DataFrame(rows, columns=["category", "lat", "lon"])
             frame.to_csv(cache, index=False)
             print(f"{category:<16} {len(frame):>6} puntos", flush=True)
