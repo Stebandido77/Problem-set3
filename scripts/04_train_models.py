@@ -61,6 +61,9 @@ SPECS = [
     # Idea 1: ponderar el entrenamiento por parecido al test.
     Spec("boosting", "full_coords", "weighted", weighted=True),
     Spec("random_forest", "full", "weighted", weighted=True),
+    # Idea 2: modelo aparte para apartamentos (97 % del test) y para casas.
+    Spec("boosting", "full_coords", "by_type", by_type=True),
+    Spec("random_forest", "full", "by_type", by_type=True),
 ]
 
 
