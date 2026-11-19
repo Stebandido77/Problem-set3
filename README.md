@@ -47,7 +47,7 @@ python 01_download_osm.py                 # una vez; requiere internet (la cach�
 python 01_download_osm.py --cache-only    # arma osm_pois.csv solo con lo ya descargado
 python 02_build_features.py
 python 03_naive_baselines.py
-python 04_train_models.py                 # todas las especificaciones (~75 min en 16 núcleos)
+python 04_train_models.py                 # todas las especificaciones (~41 min en 16 núcleos)
 python 04_train_models.py --specs 17 18   # solo algunos números de SPECS
 python 05_tune_models.py --family cart --features full --n-iter 15 --n-jobs 4
 python 06_ensemble.py --number 31 --how mean --models \
@@ -120,8 +120,8 @@ Cifras en millones de pesos.
 | `16_boosting_full_coords_by_type_level` | 48 | 90.8 | 144.5 | 171.2 | -97.3 | 34% |
 | `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | -102.4 | 32% |
 | `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | -98.9 | 37% |
-| `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 143.9 | 174.2 | -110.4 | 31% |
-| `20_random_forest_rich_by_type_per_m2` | 70 | 89.6 | 150.5 | 177.5 | -110.2 | 33% |
+| `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 144.1 | 174.5 | -111.2 | 30% |
+| `20_random_forest_rich_by_type_per_m2` | 70 | 89.7 | 150.4 | 177.3 | -110.9 | 33% |
 | `21_cart_full_tuned` | 46 | 137.6 | 165.9 | 193.2 | -116.1 | 34% |
 | `22_neural_net_full_tuned` | 46 | 129.8 | 170.6 | 212.0 | -62.2 | 38% |
 | `23_boosting_full_coords_by_type_per_m2_tuned` | 48 | 95.7 | 143.8 | 174.0 | -108.2 | 31% |
