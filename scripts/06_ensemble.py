@@ -6,8 +6,9 @@ que dejó 04_train_models.py. Como cada componente se evaluó con las mismas par
 error del ensamble en cada esquema también es fuera de muestra.
 
 Uso:
-  python scripts/06_ensemble.py --number 30 --how median \
-      --models 12_boosting_full_coords_weighted 06_random_forest_full 04_elastic_net_full
+  python scripts/06_ensemble.py --number 31 --how mean \
+      --models 17_boosting_full_coords_by_type_per_m2 04_elastic_net_full \
+               18_random_forest_full_by_type_per_m2
 """
 
 import argparse
@@ -40,7 +41,7 @@ def main():
 
     name = f"{args.number:02d}_ensemble_{args.how}_{len(args.models)}"
     row = {"model": name, "family": "ensemble", "features": "+".join(args.models),
-           "n_features": np.nan, "tuned": False, "target": args.how}
+           "n_features": np.nan, "tuned": False}
     for scheme in SCHEMES:
         pred = combine(oof[[f"{m}__{scheme}" for m in args.models]], args.how)
         rows = pred.notna()

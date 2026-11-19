@@ -79,6 +79,8 @@ SPECS = [
     # Idea 5: hiperparámetros sintonizados con validación espacial (05_tune_models.py).
     Spec("cart", "full", "tuned", tuned=True),
     Spec("neural_net", "full", "tuned", tuned=True),
+    # Ojo: 05 busca sobre log(precio); estos parámetros se copian a los dos submodelos del
+    # precio por m2, así que no están sintonizados para ese objetivo.
     Spec("boosting", "full_coords", "by_type_per_m2_tuned", target="per_m2", by_type=True,
          tuned=True),
     Spec("random_forest", "full", "by_type_per_m2_tuned", target="per_m2", by_type=True,
@@ -182,6 +184,9 @@ def results_lock():
             handle = os.open(lock, os.O_CREAT | os.O_EXCL)
             break
         except FileExistsError:
+            # Un candado de más de 5 minutos es de una corrida que murió: se libera.
+            if lock.exists() and time.time() - lock.stat().st_mtime > 300:
+                lock.unlink(missing_ok=True)
             time.sleep(1)
     try:
         yield

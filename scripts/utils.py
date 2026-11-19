@@ -57,11 +57,10 @@ CORRIDOR_FEATURES = ["dist_carrera_7_m", "dist_cerros_m"]
 
 def haversine_m(lat1, lon1, lat2, lon2):
     """Distancia de círculo máximo en metros (acepta arreglos)."""
-    radius = 6_371_000.0
     lat1, lon1, lat2, lon2 = map(np.radians, (lat1, lon1, lat2, lon2))
     a = (np.sin((lat2 - lat1) / 2) ** 2
          + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2)
-    return 2 * radius * np.arcsin(np.sqrt(a))
+    return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
 
 
 def load_raw():
