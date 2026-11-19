@@ -1,0 +1,6 @@
+model,public_mae,date
+00_naive_1_median,377076020,2026-11-19
+11_neural_net_full,232369920,2026-11-19
+10_boosting_full_coords,180129498,2026-11-19
+31_ensemble_mean_3,189275822,2026-11-19
+32_boosting_full_coords_x115,171651437,2026-11-19
