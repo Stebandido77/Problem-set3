@@ -1,0 +1,6 @@
+submission,base,factor,test_mean,mae_northeast,bias_northeast
+57_en_boosting_core_coords_residual_q65_x110.csv,54_en_boosting_core_coords_residual_q65,1.1,926007787.6138539,163722104.0027599,16869852.386672076
+58_en_boosting_core_coords_residual_q65_x115.csv,54_en_boosting_core_coords_residual_q65,1.15,968099050.6872108,174000280.67067942,51450417.662689514
+59_en_boosting_core_coords_residual_q65_x120.csv,54_en_boosting_core_coords_residual_q65,1.2,1010190313.7605678,188196854.09441218,86030982.93870711
+60_boosting_full_coords_x120.csv,10_boosting_full_coords,1.2,916495684.9438459,,
+32_boosting_full_coords_x115.csv,10_boosting_full_coords,1.15,878308364.7378523,,
