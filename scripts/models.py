@@ -12,12 +12,14 @@ import json
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
+from scipy.special import ndtr, ndtri
 from scipy.stats import loguniform, randint, uniform
 from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import ElasticNet, LinearRegression
+from sklearn.model_selection import KFold
 from sklearn.neighbors import BallTree, NearestNeighbors
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
@@ -272,15 +274,19 @@ class TruncationCorrection(RegressorMixin, BaseEstimator):
     con [a, b] el rango del log-precio en el ajuste. Se despeja mu para cada fila. Lejos del
     tope mu es casi igual a m; cerca del tope sube. Los límites salen del precio de las filas
     de ajuste y sigma de residuos fuera de muestra dentro del mismo ajuste (validación de
-    'cv' particiones), así que no usa nada de la validación externa."""
+    'cv' particiones), así que no usa nada de la validación externa.
 
-    def __init__(self, model, cv=3, max_lift=1.0):
+    Con 'upper_only' solo se corrige el techo (a = -inf) y las filas cuya solución queda
+    pegada al borde de la búsqueda conservan la predicción original: sin eso, la fórmula
+    manda las predicciones cercanas al piso o al techo a los bordes (110 M y 4.481 M)."""
+
+    def __init__(self, model, cv=3, max_lift=1.0, upper_only=False):
         self.model = model
         self.cv = cv
         self.max_lift = max_lift   # tope de la corrección en log (1.0 = multiplicar por 2,7)
+        self.upper_only = upper_only
 
     def fit(self, X, y, sample_weight=None):
-        from sklearn.model_selection import KFold
         y = np.asarray(y, dtype=float)
         self.bounds_ = (np.log(y.min()), np.log(y.max()))
         residuals = np.empty(len(y))
@@ -292,8 +298,9 @@ class TruncationCorrection(RegressorMixin, BaseEstimator):
         return self
 
     def _truncated_median(self, mu):
-        from scipy.special import ndtr, ndtri
         a, b = self.bounds_
+        if self.upper_only:
+            a = -np.inf
         s = self.sigma_
         return mu + s * ndtri((ndtr((a - mu) / s) + ndtr((b - mu) / s)) / 2)
 
@@ -305,7 +312,11 @@ class TruncationCorrection(RegressorMixin, BaseEstimator):
             mid = (lo + hi) / 2
             below = self._truncated_median(mid) < m
             lo, hi = np.where(below, mid, lo), np.where(below, hi, mid)
-        return np.exp((lo + hi) / 2)
+        mu = (lo + hi) / 2
+        if self.upper_only:
+            at_edge = (mu <= m - 1.0 + 1e-6) | (mu >= m + self.max_lift - 1e-6)
+            mu = np.where(at_edge, m, mu)
+        return np.exp(mu)
 
 
 class ResidualBoosting(RegressorMixin, BaseEstimator):

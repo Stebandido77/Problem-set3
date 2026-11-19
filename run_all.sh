@@ -11,6 +11,10 @@ python 06_ensemble.py --number 31 --how mean --models 17_boosting_full_coords_by
 # Ronda 2: ensambles y versiones escaladas (calibración de nivel, fuera de la tabla principal).
 python 06_ensemble.py --number 55 --how mean --models 54_en_boosting_core_coords_residual_q65 48_boosting_core_coords_by_type_level_trunc
 python 06_ensemble.py --number 56 --how mean --models 54_en_boosting_core_coords_residual_q65 48_boosting_core_coords_by_type_level_trunc 04_elastic_net_full
+python 06_ensemble.py --number 63 --how mean --models 54_en_boosting_core_coords_residual_q65 62_boosting_core_coords_by_type_level_trunc_up
+# El 32 y el 60 escalan 10_boosting_full_coords.csv, el envío sin OSM que se subió a Kaggle.
+# En un clon sin envíos, 04 escribe ese nombre con la versión con OSM y estos dos cambian.
+python 09_level_calibration.py --number 32 --factors 1.15 --model none --submission 10_boosting_full_coords
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 --submission 54_en_boosting_core_coords_residual_q65
 python 09_level_calibration.py --number 60 --factors 1.20 --model none --submission 10_boosting_full_coords
 python 07_results_table.py

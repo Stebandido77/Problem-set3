@@ -1,6 +1,6 @@
-"""Entrena las seis familias de algoritmos, las evalúa con validación cruzada aleatoria,
-validación cruzada espacial y el holdout tipo Chapinero, y escribe un envío de Kaggle por
-cada especificación.
+"""Entrena las seis familias de algoritmos (y el híbrido en_boosting), las evalúa con
+validación cruzada aleatoria, validación cruzada espacial, el holdout tipo Chapinero y el
+holdout nororiental, y escribe un envío de Kaggle por cada especificación.
 
 Salidas:
   stores/submissions/<nn>_<familia>_<predictores>[_variante].csv   envíos para Kaggle
@@ -12,6 +12,9 @@ Uso:
   python scripts/04_train_models.py                       # todas las especificaciones
   python scripts/04_train_models.py --families boosting   # solo una familia
   python scripts/04_train_models.py --specs 12 13         # solo algunos números
+  python scripts/04_train_models.py --specs 54 --schemes northeast --no-submission
+      # un solo esquema; los demás conservan su resultado anterior (ojo: si la
+      # especificación cambió, hay que correrla con todos los esquemas)
 """
 
 import argparse
@@ -61,6 +64,7 @@ class Spec:
     synthetic: bool = False  # sintéticos tipo SMOTER de la cola alta (SyntheticTail)
     impute_area: bool = False  # completa el área faltante con un modelo (ImputedArea)
     truncation: bool = False   # corrige por el truncamiento del precio (TruncationCorrection)
+    upper_only: bool = False   # la corrección solo en el techo y sin soluciones en el borde
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -173,6 +177,9 @@ ROUND_2B_START = 61
 ROUND_2B = [
     # 7. Señales de lujo y área ampliada dentro de la parte lineal del híbrido.
     Spec("en_boosting", "lux_core_coords", "residual_q65", params=RESIDUAL_Q65),
+    # 8. Corrección por truncamiento arreglada (la revisión encontró soluciones en el borde).
+    Spec("boosting", "core_coords", "by_type_level_trunc_up", target="level", by_type=True,
+         truncation=True, upper_only=True),
 ]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
@@ -196,7 +203,7 @@ def build_spec_model(spec, params):
     if spec.price_weight:
         model = PriceWeighted(model, spec.price_weight)
     if spec.truncation:
-        model = TruncationCorrection(model)
+        model = TruncationCorrection(model, upper_only=spec.upper_only)
     if spec.neighbors:
         model = NeighborhoodLevel(model, drop_coords="coords" not in spec.features,
                                   surface_col=surface_col)

@@ -13,6 +13,7 @@ Uso:
 """
 
 import argparse
+import re
 
 import numpy as np
 import pandas as pd
@@ -42,7 +43,7 @@ def main():
     args = parser.parse_args()
 
     base = pd.read_csv(SUBMISSIONS_DIR / f"{args.submission}.csv")
-    model = args.model or args.submission.split("_v")[0]
+    model = args.model or re.sub(r"_v\d+$", "", args.submission)
     stem = args.submission.split("_", 1)[1]
     rows = []
     for number, factor in enumerate(args.factors, start=args.number):
