@@ -58,6 +58,9 @@ SPECS = [
     Spec("boosting", "full"),
     Spec("boosting", "full_coords"),
     Spec("neural_net", "full"),
+    # Idea 1: ponderar el entrenamiento por parecido al test.
+    Spec("boosting", "full_coords", "weighted", weighted=True),
+    Spec("random_forest", "full", "weighted", weighted=True),
 ]
 
 
