@@ -1,0 +1,27 @@
+{
+  "cart_full": {
+    "regressor__decisiontreeregressor__ccp_alpha": 4.3119751330408985e-05,
+    "regressor__decisiontreeregressor__max_depth": 20,
+    "regressor__decisiontreeregressor__min_samples_leaf": 74
+  },
+  "neural_net_full": {
+    "regressor__mlpregressor__alpha": 0.026099886333522827,
+    "regressor__mlpregressor__hidden_layer_sizes": [
+      64
+    ],
+    "regressor__mlpregressor__learning_rate_init": 0.0003917728701600971
+  },
+  "random_forest_full": {
+    "regressor__randomforestregressor__max_depth": null,
+    "regressor__randomforestregressor__max_features": 0.49834489282127126,
+    "regressor__randomforestregressor__min_samples_leaf": 5
+  },
+  "boosting_full_coords": {
+    "regressor__lgbmregressor__colsample_bytree": 0.5918763371989715,
+    "regressor__lgbmregressor__learning_rate": 0.018911988823718865,
+    "regressor__lgbmregressor__min_child_samples": 55,
+    "regressor__lgbmregressor__n_estimators": 1228,
+    "regressor__lgbmregressor__num_leaves": 73,
+    "regressor__lgbmregressor__reg_lambda": 15.98459788611483
+  }
+}
