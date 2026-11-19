@@ -11,11 +11,14 @@ import pandas as pd
 from sklearn.neighbors import BallTree
 
 from utils import (EARTH_RADIUS_M, ID_COL, OSM_POIS_PATH, PROCESSED_DIR, TARGET,
-                   haversine_m, load_raw, test_similarity)
+                   distance_to_nearest_m, haversine_m, load_raw, test_similarity)
 
 COUNT_RADIUS_M = 500
 # Categorías densas: además de la distancia, cuántas hay a 500 m (densidad de servicios).
 COUNT_CATEGORIES = ["restaurant", "bar", "bank", "park", "school"]
+# Conteos adicionales a 300 m (cuadra) y 1 km (barrio), también para transporte y mercados.
+EXTRA_COUNT_RADII_M = [300, 1000]
+EXTRA_COUNT_CATEGORIES = COUNT_CATEGORIES + ["transit_station", "supermarket"]
 
 # Puntos de referencia (coordenadas aproximadas). Capturan el gradiente de precios
 # respecto a los centros de empleo y ocio del nororiente y el centro de la ciudad.
@@ -24,6 +27,17 @@ LANDMARKS = {
     "parque_93": (4.6765, -74.0482),
     "centro_internacional": (4.6135, -74.0695),
     "plaza_bolivar": (4.5981, -74.0760),
+}
+
+# Ejes trazados a mano con coordenadas aproximadas (sur a norte): la Carrera Séptima y el
+# borde de los cerros orientales. El precio cae a medida que uno se aleja de ambos.
+CORRIDORS = {
+    "carrera_7": [(4.598, -74.0755), (4.6125, -74.0695), (4.632, -74.0655),
+                  (4.645, -74.0625), (4.656, -74.057), (4.669, -74.050), (4.684, -74.041),
+                  (4.706, -74.031), (4.727, -74.026), (4.751, -74.024), (4.770, -74.023)],
+    "cerros": [(4.580, -74.065), (4.600, -74.060), (4.620, -74.058), (4.640, -74.055),
+               (4.660, -74.045), (4.680, -74.033), (4.700, -74.026), (4.730, -74.020),
+               (4.760, -74.018), (4.780, -74.017)],
 }
 
 NUMBER_WORDS = {"un": 1, "uno": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4,
@@ -46,6 +60,14 @@ TEXT_FLAGS = {
     "txt_duplex": r"duplex",
     "txt_penthouse": r"penthouse|pent house|\bph\b",
     "txt_view": r"vista panoramica|excelente vista|hermosa vista|vista a la ciudad|vista a los cerros",
+    # Señales de gama alta que no dependen de la ubicación.
+    "txt_service_room": r"(?:cuarto|alcoba|habitacion) (?:y bano )?de servicio|servicio con bano",
+    "txt_drivers_room": r"conductores|choferes",
+    "txt_walk_in": r"vestier|walking closet|walk in closet",
+    "txt_study": r"estudio|family room|biblioteca",
+    "txt_luxury": r"lujo|exclusiv",
+    "txt_spa": r"sauna|turco|jacuzzi|squash",
+    "txt_exterior": r"\bexterior\b",
 }
 
 
@@ -95,6 +117,7 @@ def add_structural_and_text(df):
     out["txt_stratum"] = first_number(text, r"estrato\s(\d)\b", 1, 6)
     out["txt_floor"] = first_number(text, r"\bpiso\s(\d{1,2})\b", 1, 40)
     out["txt_desc_length"] = out["description"].fillna("").str.len()
+    out["txt_age"] = first_number(text, r"(\d{1,2}) anos (?:de construid|de antig)", 0, 80)
     txt_bathrooms = first_number(text, NUM + r"\sbanos?\b", 1, 10)
     txt_area = area_from_text(text, out["is_house"])
 
@@ -119,6 +142,25 @@ def add_landmark_distances(df):
     return out
 
 
+def densify(points, step_m=50):
+    """Interpola puntos cada ~step_m metros a lo largo de una polilínea (lat, lon)."""
+    rows = []
+    for (lat1, lon1), (lat2, lon2) in zip(points[:-1], points[1:]):
+        n = max(int(haversine_m(lat1, lon1, lat2, lon2) // step_m), 1)
+        t = np.linspace(0, 1, n, endpoint=False)
+        rows.append(np.c_[lat1 + t * (lat2 - lat1), lon1 + t * (lon2 - lon1)])
+    rows.append(np.array([points[-1]]))
+    return pd.DataFrame(np.vstack(rows), columns=["lat", "lon"])
+
+
+def add_corridor_distances(df):
+    """Distancia en metros a la Carrera Séptima y al borde de los cerros orientales."""
+    out = df.copy()
+    for name, points in CORRIDORS.items():
+        out[f"dist_{name}_m"] = distance_to_nearest_m(out, densify(points))
+    return out
+
+
 def add_osm_features(df, pois):
     """Distancia al punto más cercano de cada categoría OSM y conteos a 500 m."""
     out = df.copy()
@@ -127,9 +169,12 @@ def add_osm_features(df, pois):
         tree = BallTree(np.radians(group[["lat", "lon"]].to_numpy()), metric="haversine")
         distance, _ = tree.query(coords, k=1)
         out[f"osm_dist_{category}_m"] = distance[:, 0] * EARTH_RADIUS_M
-        if category in COUNT_CATEGORIES:
-            out[f"osm_n_{category}_{COUNT_RADIUS_M}m"] = tree.query_radius(
-                coords, r=COUNT_RADIUS_M / EARTH_RADIUS_M, count_only=True)
+        radii = [COUNT_RADIUS_M] if category in COUNT_CATEGORIES else []
+        if category in EXTRA_COUNT_CATEGORIES:
+            radii += EXTRA_COUNT_RADII_M
+        for radius in radii:
+            out[f"osm_n_{category}_{radius}m"] = tree.query_radius(
+                coords, r=radius / EARTH_RADIUS_M, count_only=True)
     return out
 
 
@@ -143,7 +188,7 @@ def main():
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     built = {}
     for name, df in [("train", train), ("test", test)]:
-        feats = add_landmark_distances(add_structural_and_text(df))
+        feats = add_corridor_distances(add_landmark_distances(add_structural_and_text(df)))
         if pois is not None:
             feats = add_osm_features(feats, pois)
         drop = ["title", "description", "city", "operation_type", "property_type",

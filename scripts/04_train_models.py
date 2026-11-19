@@ -68,6 +68,9 @@ SPECS = [
     Spec("boosting", "full_coords", "by_type_level", target="level", by_type=True),
     Spec("boosting", "full_coords", "by_type_per_m2", target="per_m2", by_type=True),
     Spec("random_forest", "full", "by_type_per_m2", target="per_m2", by_type=True),
+    # Idea 4: predictores de gama alta del texto, ejes de ciudad y conteos de OSM a 300 m y 1 km.
+    Spec("boosting", "rich_coords", "by_type_per_m2", target="per_m2", by_type=True),
+    Spec("random_forest", "rich", "by_type_per_m2", target="per_m2", by_type=True),
 ]
 
 

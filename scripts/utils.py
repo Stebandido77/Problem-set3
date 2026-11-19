@@ -41,12 +41,18 @@ TEXT_FEATURES = [
     "txt_gated", "txt_remodeled", "txt_duplex", "txt_penthouse", "txt_view",
     "txt_stratum", "txt_floor", "txt_desc_length",
 ]
+# Segunda tanda de predictores de texto: gama alta y antigüedad.
+EXTRA_TEXT_FEATURES = [
+    "txt_service_room", "txt_drivers_room", "txt_walk_in", "txt_study", "txt_luxury",
+    "txt_spa", "txt_exterior", "txt_age",
+]
 COORD_FEATURES = ["lat", "lon"]
 SIMILARITY_FEATURES = STRUCTURAL_FEATURES + TEXT_FEATURES
 LANDMARK_FEATURES = [
     "dist_zona_t_m", "dist_parque_93_m", "dist_centro_internacional_m",
     "dist_plaza_bolivar_m",
 ]
+CORRIDOR_FEATURES = ["dist_carrera_7_m", "dist_cerros_m"]
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -72,21 +78,29 @@ def load_processed():
     return train, test
 
 
-def osm_feature_names(columns):
-    """Predictores de OpenStreetMap presentes en la base (vacío si no se descargó OSM)."""
-    return sorted(c for c in columns if c.startswith("osm_"))
+def osm_feature_names(columns, extra=False):
+    """Predictores de OpenStreetMap presentes en la base (vacío si no se descargó OSM).
+    Por defecto: distancias y conteos a 500 m; con extra=True, los conteos a 300 m y 1 km."""
+    extra_suffixes = ("_300m", "_1000m")
+    return sorted(c for c in columns if c.startswith("osm_")
+                  and c.endswith(extra_suffixes) == extra)
 
 
 def feature_sets(columns):
     """Diccionario nombre -> lista de predictores, de menos a más información."""
     osm = osm_feature_names(columns)
+    full = STRUCTURAL_FEATURES + TEXT_FEATURES + LANDMARK_FEATURES + osm
+    rich = (full + EXTRA_TEXT_FEATURES + CORRIDOR_FEATURES
+            + osm_feature_names(columns, extra=True))
     sets = {
         "base": STRUCTURAL_FEATURES,
         "base_text": STRUCTURAL_FEATURES + TEXT_FEATURES,
         # 'full' no usa lat/lon crudos: solo distancias, que viajan mejor a Chapinero.
-        "full": STRUCTURAL_FEATURES + TEXT_FEATURES + LANDMARK_FEATURES + osm,
-        "full_coords": (STRUCTURAL_FEATURES + TEXT_FEATURES + LANDMARK_FEATURES
-                        + osm + COORD_FEATURES),
+        "full": full,
+        "full_coords": full + COORD_FEATURES,
+        # 'rich' suma señales de gama alta del texto, ejes de ciudad y conteos de OSM.
+        "rich": rich,
+        "rich_coords": rich + COORD_FEATURES,
     }
     return sets
 
