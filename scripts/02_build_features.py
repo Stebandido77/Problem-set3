@@ -1,6 +1,7 @@
 """Construye la base de modelación: limpieza, predictores de texto y predictores espaciales.
 
-Entradas: stores/raw/{train,test}.csv y, si existe, stores/processed/osm_pois.csv.
+Entradas: stores/raw/{train,test}.csv y, si existen, stores/processed/osm_pois.csv y
+stores/processed/bogota_blocks.csv (estrato y valor del terreno, de 11_download_bogota.py).
 Salidas:  stores/processed/{train,test}_features.csv
 
 Uso: python scripts/02_build_features.py
@@ -12,8 +13,8 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
 
-from utils import (EARTH_RADIUS_M, ID_COL, OSM_POIS_PATH, PROCESSED_DIR, TARGET,
-                   distance_to_nearest_m, haversine_m, load_raw, test_similarity)
+from utils import (BOGOTA_BLOCKS_PATH, EARTH_RADIUS_M, ID_COL, OSM_POIS_PATH, PROCESSED_DIR,
+                   TARGET, distance_to_nearest_m, haversine_m, load_raw, test_similarity)
 
 COUNT_RADIUS_M = 500
 # Categorías densas: además de la distancia, cuántas hay a 500 m (densidad de servicios).
@@ -315,6 +316,82 @@ def add_osm_features(df, pois):
     return out
 
 
+# Nombres de barrio, edificio o conjunto en el título: n-gramas que aparecen en train y en
+# test y que se concentran en un lugar (así se descartan palabras genéricas como "venta").
+NAME_MIN_TRAIN, NAME_MIN_TEST, NAME_MAX_SPREAD_M = 10, 5, 1500
+TITLE_STOPWORDS = {"en", "de", "del", "la", "el", "los", "las", "y", "o", "a", "al", "con",
+                   "para", "por", "bogota", "x", "venta", "vendo", "vende", "se", "cod",
+                   # tipo de inmueble: si no, "apartamento chico" y "chico" serían dos nombres
+                   "apartamento", "apto", "apartaestudio", "aparta", "estudio", "casa",
+                   "penthouse", "duplex", "pent", "house",
+                   # códigos de inmobiliaria que no siempre vienen después de 'cod'
+                   "rah", "co", "vrei", "vedu", "vpad", "vbks", "vixo", "fr", "ap",
+                   # adjetivos frecuentes en títulos de la zona
+                   "moderno", "remodelado", "exterior", "hermoso", "espectacular"}
+
+
+def title_tokens(title):
+    """Palabras del título sin acentos, sin códigos (todo lo que sigue a 'cod'), sin
+    números y sin palabras vacías."""
+    text = (pd.Series([title]).fillna("").str.lower().str.normalize("NFKD")
+            .str.encode("ascii", "ignore").str.decode("ascii").iat[0])
+    text = re.split(r"\bcod\b", text)[0]
+    words = re.findall(r"[a-z]+", text)
+    return [w for w in words if w not in TITLE_STOPWORDS and len(w) > 1]
+
+
+def ngrams(tokens, max_n=3):
+    return {" ".join(tokens[i:i + n]) for n in range(1, max_n + 1)
+            for i in range(len(tokens) - n + 1)}
+
+
+def name_vocabulary(train_grams, test_grams, train):
+    """N-gramas frecuentes en train y en test cuyos anuncios de train están concentrados:
+    la mediana de su distancia al punto mediano es menor que NAME_MAX_SPREAD_M."""
+    count_train = pd.Series([g for grams in train_grams for g in grams]).value_counts()
+    count_test = pd.Series([g for grams in test_grams for g in grams]).value_counts()
+    common = count_train[count_train >= NAME_MIN_TRAIN].index.intersection(
+        count_test[count_test >= NAME_MIN_TEST].index)
+    spread = {}
+    for gram in common:
+        rows = train[[gram in grams for grams in train_grams]]
+        center_lat, center_lon = rows["lat"].median(), rows["lon"].median()
+        spread[gram] = np.median(haversine_m(rows["lat"], rows["lon"], center_lat, center_lon))
+    return {g: d for g, d in spread.items() if d < NAME_MAX_SPREAD_M}
+
+
+def best_name(grams, vocabulary):
+    """El nombre más largo del vocabulario en el título; a igual largo, el más concentrado."""
+    found = [g for g in grams if g in vocabulary]
+    if not found:
+        return np.nan
+    return min(found, key=lambda g: (-len(g.split()), vocabulary[g]))
+
+
+def add_title_names(built, raw):
+    """Columna 'title_name' (texto) en train y test; vacía si el título no trae un nombre del
+    vocabulario. Solo usa títulos y coordenadas, nunca el precio."""
+    grams = {name: [ngrams(title_tokens(t)) for t in raw[name]["title"]] for name in raw}
+    vocabulary = name_vocabulary(grams["train"], grams["test"], raw["train"])
+    for name in built:
+        built[name]["title_name"] = [best_name(g, vocabulary) for g in grams[name]]
+    print(f"Nombres en el título: {len(vocabulary)}; cubren "
+          f"{built['train']['title_name'].notna().mean():.0%} de train y "
+          f"{built['test']['title_name'].notna().mean():.0%} de test")
+
+
+def add_bogota_blocks(built):
+    """Estrato socioeconómico de la manzana y valor de referencia catastral del terreno por
+    m2 (11_download_bogota.py). El estrato 0 (manzana sin uso residencial) y el valor 0 se
+    dejan como faltantes."""
+    blocks = pd.read_csv(BOGOTA_BLOCKS_PATH).set_index(ID_COL)
+    for feats in built.values():
+        stratum = feats[ID_COL].map(blocks["ext_stratum"])
+        land_value = feats[ID_COL].map(blocks["ext_land_value_m2"])
+        feats["ext_stratum"] = stratum.where(stratum > 0)
+        feats["ext_land_value_m2"] = land_value.where(land_value > 0)
+
+
 def main():
     train, test = load_raw()
     pois = pd.read_csv(OSM_POIS_PATH) if OSM_POIS_PATH.exists() else None
@@ -333,6 +410,9 @@ def main():
         drop = ["title", "description", "city", "operation_type", "property_type",
                 "surface_total", "surface_covered", "month", "year"]
         built[name] = feats.drop(columns=drop)
+    add_title_names(built, {"train": train, "test": test})
+    if BOGOTA_BLOCKS_PATH.exists():
+        add_bogota_blocks(built)
     # Parecido al test (no es predictor): sirve para ponderar el entrenamiento.
     built["train"]["test_similarity"] = test_similarity(built["train"], built["test"])
     for name, feats in built.items():
