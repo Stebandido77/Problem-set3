@@ -26,7 +26,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
-from utils import BEST_PARAMS_PATH, EXTENDED_AREA, LUXURY_FEATURES, SEED
+from utils import BEST_PARAMS_PATH, EARTH_RADIUS_M, EXTENDED_AREA, LUXURY_FEATURES, SEED
 
 
 def impute():
@@ -175,6 +175,130 @@ class NeighborhoodLevel(RegressorMixin, BaseEstimator):
 
     def predict(self, X):
         return self.model_.predict(self._with_neighbors(X))
+
+
+def same_values(a, b):
+    """Igualdad elemento a elemento que cuenta dos faltantes como iguales."""
+    return (a == b) | (np.isnan(a) & np.isnan(b))
+
+
+class SameBuilding(RegressorMixin, BaseEstimator):
+    """Agrega la mediana del precio y del precio por m2 de los anuncios de referencia a menos
+    de 'radius_m' (el mismo edificio) y cuántos son; las medianas quedan vacías si no hay.
+
+    La referencia es el ajuste: el precio de la validación nunca entra. Se excluyen la propia
+    fila y sus gemelos, los anuncios a menos de 'twin_m' con la misma área, alcobas y baños
+    (el mismo inmueble publicado otra vez); en el ajuste, también los que tienen el mismo
+    precio. X debe traer lat y lon.
+    Con 'keep_share' < 1, en el ajuste solo esa fracción de filas (al azar) conserva los
+    predictores y el resto queda como sin edificio, para que la cobertura del ajuste se
+    parezca a la del test (78 % frente a 24 %)."""
+
+    TWIN_COLUMNS = ["surface", "bedrooms", "bathrooms"]
+
+    def __init__(self, model, radius_m=30, twin_m=1, surface_col="surface", keep_share=1.0):
+        self.model = model
+        self.radius_m = radius_m
+        self.twin_m = twin_m
+        self.surface_col = surface_col
+        self.keep_share = keep_share
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        self.reference_ = self.reference(X, y)
+        X_fit = self.with_building(X, self.reference_, own_price=y, own_pos=np.arange(len(X)))
+        hidden = np.random.default_rng(SEED).random(len(X)) >= self.keep_share
+        X_fit.loc[hidden, ["bld_price", "bld_price_m2"]] = np.nan
+        X_fit.loc[hidden, "bld_count"] = 0
+        self.model_ = fit_model(clone(self.model), X_fit, y, sample_weight)
+        return self
+
+    def reference(self, X, y):
+        """Anuncios de referencia: árbol de coordenadas, llaves de gemelo, precio y área."""
+        return {"tree": BallTree(np.radians(X[["lat", "lon"]].to_numpy()), metric="haversine"),
+                "twin": X[self.TWIN_COLUMNS].to_numpy(float),
+                "price": np.asarray(y, dtype=float),
+                "area": X[self.surface_col].to_numpy(float)}
+
+    def with_building(self, X, reference, own_price=None, own_pos=None):
+        """X con los tres predictores del edificio. 'own_pos' es la posición de cada fila
+        dentro de la referencia (para no contarse a sí misma) y 'own_price' su precio."""
+        coords = np.radians(X[["lat", "lon"]].to_numpy())
+        idx, dist = reference["tree"].query_radius(
+            coords, r=self.radius_m / EARTH_RADIUS_M, return_distance=True)
+        rows = np.repeat(np.arange(len(X)), [len(i) for i in idx])
+        cols = np.concatenate(idx).astype(int)
+        close = np.concatenate(dist) * EARTH_RADIUS_M < self.twin_m
+        own_keys = X[self.TWIN_COLUMNS].to_numpy(float)[rows]
+        drop = close & same_values(own_keys, reference["twin"][cols]).all(axis=1)
+        if own_price is not None:
+            drop |= close & (reference["price"][cols] == own_price[rows])
+        if own_pos is not None:
+            drop |= cols == own_pos[rows]
+        rows, cols = rows[~drop], cols[~drop]
+        price = reference["price"][cols]
+        stats = pd.DataFrame({"row": rows, "price": price,
+                              "per_m2": price / reference["area"][cols]}).groupby("row")
+        building = pd.DataFrame(index=np.arange(len(X)))
+        building["bld_price"] = stats["price"].median()
+        building["bld_price_m2"] = stats["per_m2"].median()
+        building["bld_count"] = stats.size()
+        building["bld_count"] = building["bld_count"].fillna(0)
+        return X.assign(**{c: building[c].to_numpy() for c in building})
+
+    def predict(self, X):
+        return self.model_.predict(self.with_building(X, self.reference_))
+
+
+class SeedAverage(RegressorMixin, BaseEstimator):
+    """Promedio de 'n_seeds' copias del modelo con semillas SEED, SEED + 1, ..."""
+
+    def __init__(self, model, n_seeds=10):
+        self.model = model
+        self.n_seeds = n_seeds
+
+    def fit(self, X, y, sample_weight=None):
+        self.models_ = []
+        for k in range(self.n_seeds):
+            model = clone(self.model)
+            model.set_params(**{key: SEED + k for key in model.get_params()
+                                if key.endswith("random_state")})
+            self.models_.append(fit_model(model, X, y, sample_weight))
+        return self
+
+    def predict(self, X):
+        return np.mean([model.predict(X) for model in self.models_], axis=0)
+
+
+class FocusFineTune(RegressorMixin, BaseEstimator):
+    """Boosting entrenado con todo el ajuste que después sigue entrenando (init_model) solo
+    con los inmuebles a menos de 'focus_m' de la Zona T, con una tasa de aprendizaje menor.
+    'model' es un boosting envuelto en TransformedTargetRegressor con objetivo en nivel.
+    Si hay menos de 'min_rows' inmuebles en la zona, se queda con el modelo general."""
+
+    def __init__(self, model, focus_col="dist_zona_t_m", focus_m=4000, n_estimators=300,
+                 learning_rate=0.01, min_rows=500):
+        self.model = model
+        self.focus_col = focus_col
+        self.focus_m = focus_m
+        self.n_estimators = n_estimators
+        self.learning_rate = learning_rate
+        self.min_rows = min_rows
+
+    def fit(self, X, y, sample_weight=None):
+        self.model_ = fit_model(clone(self.model), X, y, sample_weight)
+        focus = (X[self.focus_col] < self.focus_m).to_numpy()
+        self.tuned_ = None
+        if focus.sum() >= self.min_rows:
+            general = self.model_.regressor_.steps[-1][1]
+            self.tuned_ = clone(general).set_params(n_estimators=self.n_estimators,
+                                                    learning_rate=self.learning_rate)
+            self.tuned_.fit(X[focus], np.asarray(y, dtype=float)[focus],
+                            init_model=general.booster_)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X) if self.tuned_ is None else self.tuned_.predict(X)
 
 
 class SyntheticTail(RegressorMixin, BaseEstimator):

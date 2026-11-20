@@ -27,9 +27,10 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from models import (FAMILIES, ImputedArea, NeighborhoodLevel, PriceWeighted,
-                    ResidualBoosting, SyntheticTail, TruncationCorrection, build_model,
-                    fit_model, load_best_params)
+from models import (FAMILIES, ByPropertyType, FocusFineTune, ImputedArea, NeighborhoodLevel,
+                    PriceWeighted, ResidualBoosting, SameBuilding, SeedAverage,
+                    SyntheticTail, TruncationCorrection, build_model, fit_model,
+                    load_best_params)
 from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR,
                    chapinero_holdout, error_summary, feature_sets, load_processed,
                    northeast_holdout, random_cv, save_submission, similarity_weights,
@@ -65,6 +66,10 @@ class Spec:
     impute_area: bool = False  # completa el área faltante con un modelo (ImputedArea)
     truncation: bool = False   # corrige por el truncamiento del precio (TruncationCorrection)
     upper_only: bool = False   # la corrección solo en el techo y sin soluciones en el borde
+    same_building: float = 0     # fracción del ajuste con precio del mismo edificio
+                                 # (SameBuilding); 0 = sin el predictor
+    n_seeds: int = 1             # promedio de varias semillas (SeedAverage)
+    fine_tune: bool = False      # sigue entrenando cerca de la Zona T (FocusFineTune)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -189,11 +194,33 @@ ROUND_2C = [
     Spec("boosting", "core_coords", "by_type_level_q75", target="level", by_type=True,
          params=quantile_loss(0.75)),
 ]
+# Ronda 3: mejorar el orden, no el nivel. Todo sobre la receta del 65 (cuantil 0,70).
+ROUND_3_START = 67
+ROUND_3 = [
+    # 1. Mediana del precio y del precio por m2 de los anuncios a menos de 30 m.
+    Spec("boosting", "core_coords", "by_type_level_q70_bld", target="level", by_type=True,
+         params=quantile_loss(0.70), same_building=1.0),
+    # 2. Promedio de 10 semillas.
+    Spec("boosting", "core_coords", "by_type_level_q70_s10", target="level", by_type=True,
+         params=quantile_loss(0.70), n_seeds=10),
+]
+# El 69 no se usa: el predictor del edificio no ayudó, así que no se promedian sus semillas.
+ROUND_3B_START = 70
+ROUND_3B = [
+    # 3. Sigue entrenando con los inmuebles a menos de 4 km de la Zona T, tasa 0,01.
+    Spec("boosting", "core_coords", "by_type_level_q70_ft", target="level", by_type=True,
+         params=quantile_loss(0.70), fine_tune=True),
+    # 1b. El 67 con el predictor del edificio solo en el 30 % del ajuste, como en el test.
+    Spec("boosting", "core_coords", "by_type_level_q70_bld30", target="level", by_type=True,
+         params=quantile_loss(0.70), same_building=0.3),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
                   **dict(enumerate(ROUND_2B, start=ROUND_2B_START)),
-                  **dict(enumerate(ROUND_2C, start=ROUND_2C_START))}
+                  **dict(enumerate(ROUND_2C, start=ROUND_2C_START)),
+                  **dict(enumerate(ROUND_3, start=ROUND_3_START)),
+                  **dict(enumerate(ROUND_3B, start=ROUND_3B_START))}
 
 
 def build_spec_model(spec, params):
@@ -203,8 +230,13 @@ def build_spec_model(spec, params):
     surface_col = "surface_ext" if spec.features.startswith("lux") else "surface"
     if spec.family == "en_boosting":
         model = ResidualBoosting(params, luxury=spec.features.startswith("lux"))
+    elif spec.fine_tune:
+        model = FocusFineTune(build_model(spec.family, params, spec.target, False, surface_col))
+        model = ByPropertyType(model) if spec.by_type else model
     else:
         model = build_model(spec.family, params, spec.target, spec.by_type, surface_col)
+    if spec.n_seeds > 1:
+        model = SeedAverage(model, spec.n_seeds)
     if spec.impute_area:
         model = ImputedArea(model, surface_col)
     if spec.synthetic:
@@ -216,6 +248,8 @@ def build_spec_model(spec, params):
     if spec.neighbors:
         model = NeighborhoodLevel(model, drop_coords="coords" not in spec.features,
                                   surface_col=surface_col)
+    if spec.same_building:
+        model = SameBuilding(model, surface_col=surface_col, keep_share=spec.same_building)
     return model
 
 
