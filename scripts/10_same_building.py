@@ -22,27 +22,11 @@ import importlib
 import numpy as np
 import pandas as pd
 
-from models import SameBuilding
-from utils import (NORTHEAST_PRICE_CAP, PROCESSED_DIR, TARGET, VIEWS_DIR,
-                   feature_sets, load_processed, northeast_holdout)
+from models import building_count
+from utils import (PROCESSED_DIR, TARGET, VIEWS_DIR, feature_sets, load_processed,
+                   northeast_holdout, transductive_reference)
 
 training = importlib.import_module("04_train_models")
-
-
-def building_count(X_query, X_ref, y_ref, own_price=None, own_pos=None):
-    """Número de anuncios del mismo edificio de cada fila con las reglas de SameBuilding."""
-    finder = SameBuilding(model=None)
-    reference = finder.reference(X_ref, y_ref)
-    return finder.with_building(X_query, reference, own_price, own_pos)["bld_count"].to_numpy()
-
-
-def transductive_reference(y, fit_idx, val_idx):
-    """Referencia transductiva (ajuste + validación hasta el tope) y la posición de cada fila
-    de validación dentro de ella (-1 si no está)."""
-    in_reference = val_idx[y.iloc[val_idx].to_numpy() <= NORTHEAST_PRICE_CAP]
-    ref_idx = np.r_[fit_idx, in_reference]
-    position = pd.Series(np.arange(len(ref_idx)), index=ref_idx)
-    return ref_idx, position.reindex(val_idx).fillna(-1).astype(int).to_numpy()
 
 
 def transductive_prediction(spec, X, y, fit_idx, val_idx):

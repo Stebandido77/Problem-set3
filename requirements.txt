@@ -1,7 +1,8 @@
 numpy>=1.26
 pandas>=2.1
 scipy>=1.11
-scikit-learn>=1.4
+scikit-learn>=1.6
 lightgbm>=4.0
 requests>=2.31
 matplotlib>=3.8
+torch>=2.2

@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/scripts"
 python 01_download_osm.py     # requiere internet; se puede omitir si ya existe osm_pois.csv
+python 11_download_bogota.py  # requiere internet la primera vez; caché en stores/external
 python 02_build_features.py
 python 03_naive_baselines.py
 python 04_train_models.py
@@ -17,5 +18,12 @@ python 06_ensemble.py --number 63 --how mean --models 54_en_boosting_core_coords
 python 09_level_calibration.py --number 32 --factors 1.15 --model none --submission 10_boosting_full_coords
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 --submission 54_en_boosting_core_coords_residual_q65
 python 09_level_calibration.py --number 60 --factors 1.20 --model none --submission 10_boosting_full_coords
+# Ronda 3b: sintonización en el holdout ponderado (antes de 04 si se reproduce desde cero,
+# porque 04 lee best_params.json) y mezclas con pesos fijos con la red cuantílica.
+#   python 05_tune_models.py --spec 65 --n-iter 40 --n-jobs 4
+#   python 05_tune_models.py --spec 4 --n-iter 15 --n-jobs 8
+python 06_ensemble.py --number 84 --how weighted --weights 0.9 0.1 --models 83_boosting_ext_core_coords_by_type_level_q70_ridge_s10 78_quantile_net_core_coords_by_type_q70
+python 06_ensemble.py --number 85 --how weighted --weights 0.8 0.2 --models 83_boosting_ext_core_coords_by_type_level_q70_ridge_s10 78_quantile_net_core_coords_by_type_q70
 python 07_results_table.py
+python 12_text_report.py --svd 20
 # Opcional y lento (~5 min por esquema): python 08_calibrate_holdout.py

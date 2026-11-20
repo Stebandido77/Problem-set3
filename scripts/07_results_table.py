@@ -1,5 +1,10 @@
 """Tabla de resultados en Markdown para el README, a partir de views/cv_results.csv.
 
+Antes de la tabla recalcula en views/cv_results.csv la columna mae_weighted (holdout
+nororiental ponderado como el test, utils.weighted_mae) de todas las filas con predicciones
+del holdout guardadas, para que todas usen la misma definición. En las filas con el
+predictor del mismo edificio (67, 71) no es comparable: ver 10_same_building.py.
+
 Salidas:
   views/cv_results_table.md     se copia tal cual en la sección de resultados del README
   views/northeast_deciles.csv   error y sesgo por decil de precio en el holdout nororiental,
@@ -10,7 +15,9 @@ Uso: python scripts/07_results_table.py
 
 import pandas as pd
 
-from utils import NORTHEAST_PRICE_CAP, PROCESSED_DIR, TARGET, VIEWS_DIR
+from models import northeast_building_groups
+from utils import (NORTHEAST_PRICE_CAP, PROCESSED_DIR, TARGET, VIEWS_DIR, load_processed,
+                   weighted_mae)
 
 
 def millions(value):
@@ -52,8 +59,23 @@ def decile_table(results):
     return pd.DataFrame(rows)
 
 
+def rescore_weighted(results):
+    """Recalcula mae_weighted con las predicciones guardadas del holdout nororiental."""
+    train, test = load_processed()
+    val_idx, groups = northeast_building_groups(train, test, train[TARGET])
+    oof = pd.read_csv(PROCESSED_DIR / "oof_predictions.csv")
+    y_val = oof[TARGET].to_numpy()[val_idx]
+    for i, model in results["model"].items():
+        column = f"{model}__northeast"
+        if column in oof:
+            results.loc[i, "mae_weighted"] = weighted_mae(
+                y_val, oof[column].to_numpy()[val_idx], groups)
+    return results
+
+
 def main():
-    results = pd.read_csv(VIEWS_DIR / "cv_results.csv").sort_values("model")
+    results = rescore_weighted(pd.read_csv(VIEWS_DIR / "cv_results.csv").sort_values("model"))
+    results.to_csv(VIEWS_DIR / "cv_results.csv", index=False)
     decile_table(results).to_csv(VIEWS_DIR / "northeast_deciles.csv", index=False)
     table = pd.DataFrame({
         "Modelo": "`" + results["model"] + "`",
@@ -62,6 +84,7 @@ def main():
         "MAE espacial": results["mae_spatial"].map(or_dash(millions)),
         "MAE tipo Chapinero": results["mae_chapinero"].map(or_dash(millions)),
         "MAE nororiental": results["mae_northeast"].map(or_dash(millions)),
+        "MAE ponderado": results["mae_weighted"].map(or_dash(millions)),
         "Sesgo nororiental": results["bias_northeast"].map(
             or_dash(lambda v: f"{v / 1e6:+.1f}")),
         "% sobrepredicho (nororiental)": results["share_over_northeast"].map(

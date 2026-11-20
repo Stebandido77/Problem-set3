@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
 from sklearn.cluster import KMeans
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from sklearn.model_selection import GroupKFold, KFold, StratifiedKFold
 from sklearn.neighbors import BallTree
 
@@ -32,6 +34,7 @@ SUBMISSIONS_DIR = ROOT / "stores" / "submissions"
 VIEWS_DIR = ROOT / "views"
 OSM_POIS_PATH = PROCESSED_DIR / "osm_pois.csv"
 BEST_PARAMS_PATH = PROCESSED_DIR / "best_params.json"
+BOGOTA_BLOCKS_PATH = PROCESSED_DIR / "bogota_blocks.csv"
 
 ID_COL = "property_id"
 TARGET = "price"
@@ -68,6 +71,8 @@ LANDMARK_FEATURES = [
     "dist_plaza_bolivar_m",
 ]
 CORRIDOR_FEATURES = ["dist_carrera_7_m", "dist_cerros_m"]
+# Datos abiertos de Bogotá por manzana (11_download_bogota.py): estrato y valor del terreno.
+EXTERNAL_FEATURES = ["ext_stratum", "ext_land_value_m2"]
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -86,9 +91,15 @@ def load_raw():
 
 
 def load_processed():
-    """Lee las bases con predictores construidas por 02_build_features.py."""
+    """Lee las bases con predictores construidas por 02_build_features.py, más el texto
+    crudo del anuncio (título y descripción) en la columna 'text' para los modelos que lo
+    convierten en predictores dentro de cada partición."""
     train = pd.read_csv(PROCESSED_DIR / "train_features.csv")
     test = pd.read_csv(PROCESSED_DIR / "test_features.csv")
+    raw_train, raw_test = load_raw()
+    for df, raw in [(train, raw_train), (test, raw_test)]:
+        text = raw["title"].fillna("") + " " + raw["description"].fillna("")
+        df["text"] = df[ID_COL].map(dict(zip(raw[ID_COL], text)))
     return train, test
 
 
@@ -122,6 +133,9 @@ def feature_sets(columns):
         # 'core' es 'full' sin OSM: los envíos 01 a 11 se subieron así a Kaggle.
         "core": [c for c in full if c not in osm],
         "core_coords": [c for c in full if c not in osm] + COORD_FEATURES,
+        # 'ext_core' es 'core' con el estrato y el valor del terreno de la manzana.
+        "ext_core_coords": ([c for c in full if c not in osm] + EXTERNAL_FEATURES
+                            + COORD_FEATURES),
         # 'lux_core' es 'core' con el área ampliada y las señales de lujo.
         "lux_core_coords": ([EXTENDED_AREA.get(c, c) for c in full if c not in osm]
                             + LUXURY_FEATURES + COORD_FEATURES),
@@ -132,6 +146,39 @@ def feature_sets(columns):
 def random_cv(n_splits=5):
     """Validación cruzada estándar (particiones aleatorias)."""
     return KFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+
+
+TWIN_DISTANCE_M = 1
+TWIN_COLUMNS = ["surface", "bedrooms", "bathrooms"]
+
+
+def twin_groups(df):
+    """Grupo de gemelos de cada fila: anuncios a menos de 1 m con la misma área, alcobas y
+    baños (dos faltantes cuentan como iguales) y, si df trae la columna 'text', anuncios con
+    el mismo texto normalizado (reanuncios con otra ubicación o estructura). Se unen de
+    forma transitiva; una fila sin gemelos forma su propio grupo. No usa el precio."""
+    coords = np.radians(df[["lat", "lon"]].to_numpy())
+    pairs = BallTree(coords, metric="haversine").query_radius(
+        coords, r=TWIN_DISTANCE_M / EARTH_RADIUS_M)
+    rows = np.repeat(np.arange(len(df)), [len(p) for p in pairs])
+    cols = np.concatenate(pairs)
+    keys = df[TWIN_COLUMNS].to_numpy(float)
+    same = ((keys[rows] == keys[cols]) | (np.isnan(keys[rows]) & np.isnan(keys[cols])))
+    rows, cols = rows[same.all(axis=1)], cols[same.all(axis=1)]
+    if "text" in df.columns:
+        # Cada texto repetido se une con su primera aparición.
+        normalized = df["text"].str.lower().str.replace(r"\s+", " ", regex=True).str.strip()
+        first = pd.Series(np.arange(len(df))).groupby(normalized.to_numpy()).transform("first")
+        rows = np.r_[rows, np.arange(len(df))]
+        cols = np.r_[cols, first.to_numpy()]
+    graph = coo_matrix((np.ones(len(rows)), (rows, cols)), shape=(len(df), len(df)))
+    return connected_components(graph, directed=False)[1]
+
+
+def random_twin_splits(df, n_splits=5):
+    """Validación aleatoria con los gemelos siempre en la misma partición."""
+    folds = GroupKFold(n_splits=n_splits, shuffle=True, random_state=SEED)
+    return list(folds.split(df, groups=twin_groups(df)))
 
 
 def spatial_groups(df, n_clusters=10):
@@ -219,6 +266,26 @@ def northeast_holdout(train, test, radius_m=NORTHEAST_RADIUS_M, buffer_m=0,
     if price_cap:
         fit &= (train[TARGET] <= price_cap).to_numpy()
     return np.flatnonzero(fit), np.flatnonzero(validation)
+
+
+def transductive_reference(y, fit_idx, val_idx, price_cap=NORTHEAST_PRICE_CAP):
+    """Referencia del holdout transductivo: el ajuste más la validación con precio hasta el
+    tope, y la posición de cada fila de validación dentro de ella (-1 si no está)."""
+    in_reference = val_idx[np.asarray(y)[val_idx] <= price_cap]
+    ref_idx = np.r_[fit_idx, in_reference]
+    position = pd.Series(np.arange(len(ref_idx)), index=ref_idx)
+    return ref_idx, position.reindex(val_idx).fillna(-1).astype(int).to_numpy()
+
+
+def weighted_mae(y_true, y_pred, groups):
+    """MAE del holdout nororiental ponderado como el test (la columna de la ronda 3a): el
+    error de los inmuebles con anuncios del mismo edificio en la referencia transductiva
+    pesa lo que pesan en el test (24 %), y el de los que no tienen anuncios del mismo
+    edificio en el ajuste (casi toda la validación), lo demás. 'groups' viene de
+    models.northeast_building_groups."""
+    with_building, without_building, share = groups
+    err = np.abs(np.asarray(y_pred) - np.asarray(y_true))
+    return share * err[with_building].mean() + (1 - share) * err[without_building].mean()
 
 
 def error_summary(y_true, y_pred):

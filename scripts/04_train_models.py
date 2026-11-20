@@ -27,19 +27,21 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from models import (FAMILIES, ByPropertyType, FocusFineTune, ImputedArea, NeighborhoodLevel,
-                    PriceWeighted, ResidualBoosting, SameBuilding, SeedAverage,
-                    SyntheticTail, TruncationCorrection, build_model, fit_model,
-                    load_best_params)
+from models import (FAMILIES, ByPropertyType, FocusFineTune, ImputedArea, NameLevel,
+                    NeighborhoodLevel, PriceWeighted, QuantileNet, ResidualBoosting,
+                    SameBuilding, SeedAverage, SyntheticTail, TextFeatures, TruncationCorrection,
+                    build_model, fit_model, load_best_params, northeast_building_groups)
 from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR,
                    chapinero_holdout, error_summary, feature_sets, load_processed,
-                   northeast_holdout, random_cv, save_submission, similarity_weights,
-                   spatial_cv_splits)
+                   northeast_holdout, random_cv, random_twin_splits, save_submission,
+                   similarity_weights, spatial_cv_splits, weighted_mae)
 
 
 # Esquemas de validación: nombre -> función (train, test) -> lista de particiones.
 SCHEMES = {
     "random": lambda train, test: list(random_cv().split(train)),
+    # La misma validación aleatoria, pero con los gemelos siempre en la misma partición.
+    "random_twins": lambda train, test: random_twin_splits(train),
     "spatial": lambda train, test: spatial_cv_splits(train),
     "chapinero": lambda train, test: [chapinero_holdout(train, test)],
     "northeast": lambda train, test: [northeast_holdout(train, test)],
@@ -70,6 +72,9 @@ class Spec:
                                  # (SameBuilding); 0 = sin el predictor
     n_seeds: int = 1             # promedio de varias semillas (SeedAverage)
     fine_tune: bool = False      # sigue entrenando cerca de la Zona T (FocusFineTune)
+    text: str = ""               # texto completo: 'svd20', 'svd50', 'svd100' o 'ridge'
+    names: bool = False          # nivel del barrio o edificio del título (NameLevel)
+    tune_key: str = ""           # clave de best_params.json si no es '<familia>_<conjunto>'
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -214,13 +219,49 @@ ROUND_3B = [
     Spec("boosting", "core_coords", "by_type_level_q70_bld30", target="level", by_type=True,
          params=quantile_loss(0.70), same_building=0.3),
 ]
+# Ronda 3b: información nueva sobre la receta del 65. Criterio: holdout ponderado como el
+# test (mae_weighted).
+ROUND_3C_START = 72
+Q70 = dict(target="level", by_type=True, params=quantile_loss(0.70))
+# Claves de best_params.json que escriben 05 --spec 65 y 05 --spec 4.
+Q70_KEY = "boosting_core_coords_by_type_level_q70_holdout"
+ELASTIC_NET_KEY = "elastic_net_full_holdout"
+ROUND_3C = [
+    # A. Texto completo: TF-IDF de palabras y bigramas, ajustado dentro de cada partición.
+    Spec("boosting", "core_coords", "by_type_level_q70_svd20", text="svd20", **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_svd50", text="svd50", **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_svd100", text="svd100", **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge", text="ridge", **Q70),
+    # A'. Nombre del barrio o edificio en el título.
+    Spec("boosting", "core_coords", "by_type_level_q70_names", names=True, **Q70),
+    # C. Estrato de la manzana y valor de referencia catastral del terreno por m2.
+    Spec("boosting", "ext_core_coords", "by_type_level_q70", **Q70),
+    # D. Red por tipo con pérdida cuantílica en 0,70 y 5 semillas; luego con sintéticos SMOTER
+    # de los apartamentos caros del nororiente (SyntheticTail, solo con el ajuste).
+    Spec("quantile_net", "core_coords", "by_type_q70", target="level", by_type=True),
+    Spec("quantile_net", "core_coords", "by_type_q70_smoter", target="level", by_type=True,
+         synthetic=True),
+    # B. La receta del 65 y el elastic net (fila 4) sintonizados en el holdout ponderado:
+    # python 05_tune_models.py --spec 65 --n-iter 40 / --spec 4 --n-iter 15. Su MAE en el
+    # holdout nororiental es optimista (se escogió ahí); valen la espacial y la de Chapinero.
+    Spec("boosting", "core_coords", "by_type_level_q70_tuned", tuned=True,
+         tune_key=Q70_KEY, **Q70),
+    Spec("elastic_net", "full", "tuned_weighted", tuned=True, tune_key=ELASTIC_NET_KEY),
+    # Combinación: lo que ayudó (A, texto con ridge; C, estrato y valor del terreno, que
+    # mejora el holdout tipo Chapinero y la espacial, aunque no el nororiental). La
+    # sintonización (B, fila 80) empeora el holdout tipo Chapinero y no entra.
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge", text="ridge", **Q70),
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_s10", text="ridge",
+         n_seeds=10, **Q70),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
                   **dict(enumerate(ROUND_2B, start=ROUND_2B_START)),
                   **dict(enumerate(ROUND_2C, start=ROUND_2C_START)),
                   **dict(enumerate(ROUND_3, start=ROUND_3_START)),
-                  **dict(enumerate(ROUND_3B, start=ROUND_3B_START))}
+                  **dict(enumerate(ROUND_3B, start=ROUND_3B_START)),
+                  **dict(enumerate(ROUND_3C, start=ROUND_3C_START))}
 
 
 def build_spec_model(spec, params):
@@ -230,6 +271,9 @@ def build_spec_model(spec, params):
     surface_col = "surface_ext" if spec.features.startswith("lux") else "surface"
     if spec.family == "en_boosting":
         model = ResidualBoosting(params, luxury=spec.features.startswith("lux"))
+    elif spec.family == "quantile_net":
+        model = QuantileNet(**params)
+        model = ByPropertyType(model) if spec.by_type else model
     elif spec.fine_tune:
         model = FocusFineTune(build_model(spec.family, params, spec.target, False, surface_col))
         model = ByPropertyType(model) if spec.by_type else model
@@ -250,14 +294,25 @@ def build_spec_model(spec, params):
                                   surface_col=surface_col)
     if spec.same_building:
         model = SameBuilding(model, surface_col=surface_col, keep_share=spec.same_building)
+    if spec.text:
+        mode = "ridge" if spec.text == "ridge" else "svd"
+        n_components = int(spec.text.removeprefix("svd")) if mode == "svd" else 0
+        model = TextFeatures(model, mode=mode, n_components=n_components)
+    if spec.names:
+        model = NameLevel(model)
     return model
 
 
 def spec_features(spec, sets):
-    """Predictores de una especificación; los vecinos necesitan lat/lon para buscarse."""
+    """Predictores de una especificación; los vecinos necesitan lat/lon para buscarse y los
+    envoltorios de texto, el texto crudo o el nombre del título."""
     features = sets[spec.features]
     if spec.neighbors:
         features = features + [c for c in COORD_FEATURES if c not in features]
+    if spec.text:
+        features = features + ["text"]
+    if spec.names:
+        features = features + ["title_name"]
     return features
 
 
@@ -298,7 +353,8 @@ def update_table(path, new, key):
 
 def main():
     parser = argparse.ArgumentParser()
-    families = FAMILIES + ["en_boosting"]  # el híbrido de 33 combina dos familias
+    # El híbrido de 33 combina dos familias; la red cuantílica es la red de la ronda 3.
+    families = FAMILIES + ["en_boosting", "quantile_net"]
     parser.add_argument("--families", nargs="+", default=families, choices=families)
     parser.add_argument("--specs", nargs="+", type=int, help="números de SPECS a correr")
     parser.add_argument("--schemes", nargs="+", default=list(SCHEMES), choices=list(SCHEMES),
@@ -314,6 +370,8 @@ def main():
     weights = similarity_weights(train["test_similarity"])
     schemes = {scheme: make_splits(train, test) for scheme, make_splits in SCHEMES.items()
                if scheme in args.schemes}
+    if "northeast" in schemes:
+        val_idx, groups = northeast_building_groups(train, test, y)
 
     oof_table = train[[ID_COL, TARGET]].copy()
     test_table = test[[ID_COL]].copy()
@@ -323,7 +381,7 @@ def main():
         start = time.time()
         name = spec.name(number)
         features = spec_features(spec, sets)
-        key = f"{spec.family}_{spec.features}"
+        key = spec.tune_key or f"{spec.family}_{spec.features}"
         params = best_params.get(key, {}) if spec.tuned else {}
         w = weights if spec.weighted else None
 
@@ -338,6 +396,10 @@ def main():
             row[f"mae_{scheme}"] = summary["mae"]
             row[f"bias_{scheme}"] = summary["bias"]
             row[f"share_over_{scheme}"] = summary["share_overpredicted"]
+            if scheme == "northeast":
+                # Ponderado como el test; en los modelos con SameBuilding no es comparable
+                # (ver 10_same_building.py).
+                row["mae_weighted"] = weighted_mae(y.iloc[val_idx], pred[val_idx], groups)
 
         # Ajuste final con todo el entrenamiento y envío a Kaggle.
         test_columns = [ID_COL]

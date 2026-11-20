@@ -16,17 +16,20 @@ from scipy.special import ndtr, ndtri
 from scipy.stats import loguniform, randint, uniform
 from sklearn.base import BaseEstimator, RegressorMixin, clone
 from sklearn.compose import TransformedTargetRegressor
+from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import ElasticNet, LinearRegression
-from sklearn.model_selection import KFold
+from sklearn.linear_model import ElasticNet, LinearRegression, Ridge
+from sklearn.model_selection import GroupKFold, KFold
 from sklearn.neighbors import BallTree, NearestNeighbors
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
-from utils import BEST_PARAMS_PATH, EARTH_RADIUS_M, EXTENDED_AREA, LUXURY_FEATURES, SEED
+from utils import (BEST_PARAMS_PATH, EARTH_RADIUS_M, EXTENDED_AREA, LUXURY_FEATURES, SEED,
+                   northeast_holdout, transductive_reference, twin_groups)
 
 
 def impute():
@@ -248,6 +251,202 @@ class SameBuilding(RegressorMixin, BaseEstimator):
 
     def predict(self, X):
         return self.model_.predict(self.with_building(X, self.reference_))
+
+
+def building_count(X_query, X_ref, y_ref, own_price=None, own_pos=None):
+    """Número de anuncios del mismo edificio de cada fila, con las reglas de SameBuilding."""
+    finder = SameBuilding(model=None)
+    reference = finder.reference(X_ref, y_ref)
+    return finder.with_building(X_query, reference, own_price, own_pos)["bld_count"].to_numpy()
+
+
+def northeast_building_groups(train, test, y):
+    """Grupos del holdout ponderado como el test (utils.weighted_mae): las filas de
+    validación con anuncios del mismo edificio en la referencia transductiva, las que no los
+    tienen en el ajuste, y la fracción del test que los tiene en train. Devuelve también los
+    índices de validación."""
+    columns = ["lat", "lon"] + SameBuilding.TWIN_COLUMNS
+    fit_idx, val_idx = northeast_holdout(train, test)
+    ref_idx, own_pos = transductive_reference(y, fit_idx, val_idx)
+    X = train[columns]
+    with_building = building_count(X.iloc[val_idx], X.iloc[ref_idx], y.iloc[ref_idx],
+                                   own_price=y.iloc[val_idx].to_numpy(float),
+                                   own_pos=own_pos) > 0
+    without_building = building_count(X.iloc[val_idx], X.iloc[fit_idx], y.iloc[fit_idx]) == 0
+    share = (building_count(test[columns], X, y) > 0).mean()
+    return val_idx, (with_building, without_building, share)
+
+
+class TextFeatures(RegressorMixin, BaseEstimator):
+    """Predictores del texto completo del anuncio (columna 'text'), ajustados solo con las
+    filas de ajuste. TF-IDF de palabras y bigramas y, según 'mode':
+    - 'svd': los primeros 'n_components' componentes de una SVD truncada (txt_svd_k);
+    - 'ridge': un ridge del log del precio sobre el TF-IDF (txt_ridge). En el ajuste, cada
+      fila recibe la predicción fuera de muestra de un ridge que no vio su grupo de gemelos,
+      así que su propio precio nunca entra en su predictor."""
+
+    def __init__(self, model, mode="svd", n_components=50, text_col="text", alpha=3.0):
+        self.model = model
+        self.mode = mode
+        self.n_components = n_components
+        self.text_col = text_col
+        self.alpha = alpha
+
+    def _vectorizer(self):
+        return TfidfVectorizer(ngram_range=(1, 2), min_df=5, max_features=100_000,
+                               sublinear_tf=True, strip_accents="unicode", dtype=np.float32)
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        self.tfidf_ = self._vectorizer().fit(X[self.text_col])
+        tfidf = self.tfidf_.transform(X[self.text_col])
+        if self.mode == "svd":
+            self.svd_ = TruncatedSVD(self.n_components, random_state=SEED).fit(tfidf)
+            features = self._svd_features(tfidf)
+        else:
+            self.ridge_ = Ridge(alpha=self.alpha).fit(tfidf, np.log(y))
+            features = {"txt_ridge": self._out_of_fold_ridge(X, tfidf, np.log(y))}
+        X_fit = X.drop(columns=self.text_col).assign(**features)
+        self.model_ = fit_model(clone(self.model), X_fit, y, sample_weight)
+        return self
+
+    def _svd_features(self, tfidf):
+        components = self.svd_.transform(tfidf)
+        return {f"txt_svd_{k}": components[:, k] for k in range(self.n_components)}
+
+    def _out_of_fold_ridge(self, X, tfidf, log_y):
+        out = np.zeros(len(log_y))
+        folds = GroupKFold(n_splits=5, shuffle=True, random_state=SEED)
+        for fit_idx, pred_idx in folds.split(tfidf, groups=twin_groups(X)):
+            ridge = Ridge(alpha=self.alpha).fit(tfidf[fit_idx], log_y[fit_idx])
+            out[pred_idx] = ridge.predict(tfidf[pred_idx])
+        return out
+
+    def transform_text(self, X):
+        tfidf = self.tfidf_.transform(X[self.text_col])
+        features = (self._svd_features(tfidf) if self.mode == "svd"
+                    else {"txt_ridge": self.ridge_.predict(tfidf)})
+        return X.drop(columns=self.text_col).assign(**features)
+
+    def predict(self, X):
+        return self.model_.predict(self.transform_text(X))
+
+
+class NameLevel(RegressorMixin, BaseEstimator):
+    """Nivel de precio del nombre de barrio o edificio del título ('title_name', de
+    02_build_features.py): media del log del precio de los anuncios de ajuste con el mismo
+    nombre y cuántos son. En el ajuste, cada fila excluye a su grupo de gemelos (y a sí
+    misma); con menos de 'min_count' anuncios el nivel queda vacío."""
+
+    def __init__(self, model, name_col="title_name", min_count=5):
+        self.model = model
+        self.name_col = name_col
+        self.min_count = min_count
+
+    def fit(self, X, y, sample_weight=None):
+        log_y = np.log(np.asarray(y, dtype=float))
+        frame = pd.DataFrame({"name": X[self.name_col].to_numpy(), "twin": twin_groups(X),
+                              "log_y": log_y})
+        self.levels_ = frame.groupby("name")["log_y"].agg(["sum", "count"])
+        own = frame.groupby(["name", "twin"])["log_y"].transform("sum")
+        own_count = frame.groupby(["name", "twin"])["log_y"].transform("count")
+        total = frame["name"].map(self.levels_["sum"])
+        count = frame["name"].map(self.levels_["count"]) - own_count
+        X_fit = self._assign(X, (total - own) / count, count)
+        self.model_ = fit_model(clone(self.model), X_fit, y, sample_weight)
+        return self
+
+    def _assign(self, X, level, count):
+        level = np.where(count >= self.min_count, level, np.nan)
+        return X.drop(columns=self.name_col).assign(
+            name_log_price=level, name_count=np.nan_to_num(np.asarray(count, dtype=float)))
+
+    def predict(self, X):
+        names = X[self.name_col]
+        level = names.map(self.levels_["sum"] / self.levels_["count"]).to_numpy()
+        return self.model_.predict(self._assign(X, level, names.map(self.levels_["count"])))
+
+
+class QuantileNet(RegressorMixin, BaseEstimator):
+    """Red neuronal (PyTorch) con pérdida cuantílica (pinball) en 'alpha' sobre el precio en
+    nivel, promediada en 'n_seeds' semillas. Faltantes con la mediana más indicador y
+    entradas estandarizadas, todo ajustado solo con las filas de ajuste. Parada temprana con
+    un 10 % del ajuste que deja juntos a los gemelos."""
+
+    def __init__(self, alpha=0.70, hidden=(128, 64), dropout=0.1, lr=3e-3, batch_size=2048,
+                 max_epochs=150, patience=10, n_seeds=5, weight_decay=1e-4):
+        self.alpha = alpha
+        self.hidden = hidden
+        self.dropout = dropout
+        self.lr = lr
+        self.batch_size = batch_size
+        self.max_epochs = max_epochs
+        self.patience = patience
+        self.n_seeds = n_seeds
+        self.weight_decay = weight_decay
+
+    SCALE = 1e9  # el precio se entrena en miles de millones
+
+    def fit(self, X, y, sample_weight=None):
+        import torch
+        torch.set_num_threads(4)
+        self.prep_ = make_pipeline(impute(), StandardScaler()).fit(X)
+        Z = torch.tensor(self.prep_.transform(X), dtype=torch.float32)
+        target = torch.tensor(np.asarray(y, dtype=float) / self.SCALE, dtype=torch.float32)
+        groups = twin_groups(X) if {"lat", "lon"} <= set(X.columns) else np.arange(len(X))
+        early = np.isin(groups, np.random.default_rng(SEED).choice(
+            np.unique(groups), len(np.unique(groups)) // 10, replace=False))
+        self.nets_ = [self._train(Z, target, torch.tensor(early), SEED + k)
+                      for k in range(self.n_seeds)]
+        return self
+
+    def _network(self, n_inputs):
+        import torch.nn as nn
+        layers, width = [], n_inputs
+        for size in self.hidden:
+            layers += [nn.Linear(width, size), nn.ReLU(), nn.Dropout(self.dropout)]
+            width = size
+        return nn.Sequential(*layers, nn.Linear(width, 1))
+
+    def _pinball(self, pred, target):
+        diff = target - pred
+        return (self.alpha * diff.clamp(min=0) + (1 - self.alpha) * (-diff).clamp(min=0)).mean()
+
+    def _train(self, Z, target, early, seed):
+        import copy
+        import torch
+        torch.manual_seed(seed)
+        net = self._network(Z.shape[1])
+        optimizer = torch.optim.Adam(net.parameters(), lr=self.lr,
+                                     weight_decay=self.weight_decay)
+        Z_fit, y_fit, Z_stop, y_stop = Z[~early], target[~early], Z[early], target[early]
+        best, best_state, waited = np.inf, None, 0
+        generator = torch.Generator().manual_seed(seed)
+        for _ in range(self.max_epochs):
+            net.train()
+            for batch in torch.randperm(len(Z_fit), generator=generator).split(self.batch_size):
+                optimizer.zero_grad()
+                loss = self._pinball(net(Z_fit[batch]).squeeze(1), y_fit[batch])
+                loss.backward()
+                optimizer.step()
+            net.eval()
+            with torch.no_grad():
+                stop_loss = self._pinball(net(Z_stop).squeeze(1), y_stop).item()
+            if stop_loss < best - 1e-5:
+                best, best_state, waited = stop_loss, copy.deepcopy(net.state_dict()), 0
+            else:
+                waited += 1
+                if waited >= self.patience:
+                    break
+        net.load_state_dict(best_state)
+        return net.eval()
+
+    def predict(self, X):
+        import torch
+        Z = torch.tensor(self.prep_.transform(X), dtype=torch.float32)
+        with torch.no_grad():
+            preds = [net(Z).squeeze(1).numpy() for net in self.nets_]
+        return np.mean(preds, axis=0) * self.SCALE
 
 
 class SeedAverage(RegressorMixin, BaseEstimator):
