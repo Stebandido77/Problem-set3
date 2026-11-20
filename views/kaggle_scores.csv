@@ -4,3 +4,6 @@ model,public_mae,date
 10_boosting_full_coords,180129498,2026-11-19
 31_ensemble_mean_3,189275822,2026-11-19
 32_boosting_full_coords_x115,171651437,2026-11-19
+54_en_boosting_core_coords_residual_q65,173342008,2026-11-19
+49_en_boosting_core_coords_residual,184099822,2026-11-19
+53_boosting_core_coords_by_type_level_q65,161664810,2026-11-19

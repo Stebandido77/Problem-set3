@@ -181,10 +181,19 @@ ROUND_2B = [
     Spec("boosting", "core_coords", "by_type_level_trunc_up", target="level", by_type=True,
          truncation=True, upper_only=True),
 ]
+# El 64 no se usa. En Kaggle el 53 (cuantil 0,65) le gana al híbrido 54: se sube el cuantil.
+ROUND_2C_START = 65
+ROUND_2C = [
+    Spec("boosting", "core_coords", "by_type_level_q70", target="level", by_type=True,
+         params=quantile_loss(0.70)),
+    Spec("boosting", "core_coords", "by_type_level_q75", target="level", by_type=True,
+         params=quantile_loss(0.75)),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
-                  **dict(enumerate(ROUND_2B, start=ROUND_2B_START))}
+                  **dict(enumerate(ROUND_2B, start=ROUND_2B_START)),
+                  **dict(enumerate(ROUND_2C, start=ROUND_2C_START))}
 
 
 def build_spec_model(spec, params):
