@@ -1,0 +1,81 @@
+direction,term,coefficient
+sube,casa,1.1944269
+sube,ascensor privado,1.0443968
+sube,la carolina,1.007553
+sube,penthouse,0.9476437
+sube,oficinas,0.86586493
+sube,carolina,0.84216386
+sube,parqueaderos,0.8307756
+sube,chico,0.829798
+sube,garajes,0.79194254
+sube,estar,0.78567487
+sube,tres garajes,0.7570545
+sube,casa en,0.7428597
+sube,servicio,0.7196812
+sube,balcones,0.70151186
+sube,estudio,0.6945815
+sube,terraza,0.67435074
+sube,cbs,0.6490451
+sube,jardin,0.64330167
+sube,salitre,0.623721
+sube,oficina,0.6191017
+sube,bosque,0.6149575
+sube,cuatro,0.608704
+sube,vehiculos,0.6067921
+sube,multicentro,0.58954155
+sube,rosales,0.5892337
+sube,family,0.5855526
+sube,tres,0.5815823
+sube,terrazas,0.57940507
+sube,locales,0.5722476
+sube,estudios,0.56944263
+sube,de servicio,0.5690511
+sube,tres parqueaderos,0.5671508
+sube,doble,0.56063265
+sube,habitaciones con,0.5512198
+sube,cada,0.5460916
+sube,medina,0.5458876
+sube,san patricio,0.5427777
+sube,cultural,0.5373597
+sube,comedor auxiliar,0.53183115
+sube,bar,0.5142123
+baja,parqueadero,-1.3580586
+baja,garaje,-1.1509604
+baja,apartaestudio,-1.0082844
+baja,cedritos,-0.79955506
+baja,apartamento,-0.67341864
+baja,sala comedor,-0.617337
+baja,kennedy,-0.5831049
+baja,habitacion,-0.5657612
+baja,hayuelos,-0.55957955
+baja,apartaestudio en,-0.5448778
+baja,con closet,-0.5152988
+baja,pradera norte,-0.51469517
+baja,apartamento en,-0.49808148
+baja,santa teresa,-0.49360642
+baja,dos banos,-0.4845495
+baja,cubierto,-0.47130814
+baja,cortijo,-0.47105196
+baja,granada,-0.46303365
+baja,aparta estudio,-0.46179876
+baja,pradera,-0.45739207
+baja,fontibon,-0.4533171
+baja,dos baos,-0.45258632
+baja,un parqueadero,-0.44819954
+baja,un garaje,-0.44263178
+baja,sin ascensor,-0.4262006
+baja,iluminado,-0.42287883
+baja,teresa,-0.41901243
+baja,nuevo techo,-0.41470352
+baja,dos habitaciones,-0.41028482
+baja,parqueaderos de,-0.40599644
+baja,campina,-0.40445924
+baja,villa,-0.40023983
+baja,habitacin,-0.40008307
+baja,castilla,-0.39505154
+baja,72,-0.3943334
+baja,acogedor,-0.3940413
+baja,cali,-0.39368713
+baja,icata,-0.38977864
+baja,gran granada,-0.38704875
+baja,la campina,-0.38683534

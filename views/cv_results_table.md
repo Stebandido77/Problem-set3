@@ -1,63 +1,74 @@
 Cifras en millones de pesos.
 
-| Modelo | Predictores | MAE aleatoria | MAE espacial | MAE tipo Chapinero | MAE nororiental | Sesgo nororiental | % sobrepredicho (nororiental) |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `01_linear_base` | 8 | 187.4 | 202.2 | 234.8 | 247.0 | -205.3 | 25% |
-| `02_linear_base_text` | 26 | 173.3 | 186.0 | 211.3 | 221.7 | -177.8 | 28% |
-| `03_linear_full` | 46 | 155.8 | 168.1 | 183.3 | 190.0 | -103.8 | 41% |
-| `04_elastic_net_full` | 46 | 132.8 | 159.7 | 172.0 | 179.3 | -107.7 | 37% |
-| `05_cart_full` | 46 | 130.6 | 169.9 | 195.6 | 200.9 | -132.4 | 33% |
-| `06_random_forest_full` | 46 | 93.9 | 147.6 | 180.2 | 193.4 | -137.5 | 33% |
-| `07_random_forest_full_coords` | 48 | 93.0 | 146.6 | 181.2 | 191.6 | -134.5 | 34% |
-| `08_boosting_base_text` | 26 | 124.4 | 150.7 | 181.2 | 192.9 | -158.9 | 24% |
-| `09_boosting_full` | 46 | 96.5 | 145.8 | 182.3 | 177.8 | -120.5 | 33% |
-| `10_boosting_full_coords` | 48 | 95.6 | 145.4 | 179.2 | 174.7 | -113.8 | 35% |
-| `11_neural_net_full` | 46 | 146.8 | 196.6 | 237.2 | 194.8 | -44.9 | 46% |
-| `12_boosting_full_coords_weighted` | 48 | 112.7 | 150.1 | 176.5 | 181.2 | -121.0 | 36% |
-| `13_random_forest_full_weighted` | 46 | 107.1 | 151.2 | 179.2 | 193.9 | -137.8 | 34% |
-| `14_boosting_full_coords_by_type` | 48 | 90.5 | 142.7 | 177.6 | 175.6 | -116.5 | 35% |
-| `15_random_forest_full_by_type` | 46 | 91.5 | 146.8 | 177.5 | 193.7 | -137.7 | 34% |
-| `16_boosting_full_coords_by_type_level` | 48 | 90.8 | 144.5 | 171.2 | 173.0 | -109.8 | 36% |
-| `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | 174.9 | -116.2 | 35% |
-| `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | 189.9 | -134.0 | 34% |
-| `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 144.1 | 174.5 | 173.2 | -115.9 | 35% |
-| `20_random_forest_rich_by_type_per_m2` | 70 | 89.7 | 150.4 | 177.3 | 186.1 | -129.0 | 35% |
-| `21_cart_full_tuned` | 46 | 137.6 | 165.9 | 193.2 | 204.1 | -141.4 | 33% |
-| `22_neural_net_full_tuned` | 46 | 129.8 | 170.6 | 212.0 | 186.8 | -108.1 | 36% |
-| `23_boosting_full_coords_by_type_per_m2_tuned` | 48 | 95.7 | 143.8 | 174.0 | 176.5 | -118.0 | 35% |
-| `24_random_forest_full_by_type_per_m2_tuned` | 46 | 96.0 | 147.2 | 172.7 | 189.9 | -133.8 | 34% |
-| `30_ensemble_median_3` | – | 93.0 | 142.2 | 167.3 | 178.8 | -121.4 | 35% |
-| `31_ensemble_mean_3` | – | 99.9 | 142.9 | 164.6 | 177.8 | -119.3 | 35% |
-| `33_en_boosting_full_coords_residual` | 48 | 96.8 | 145.3 | 168.4 | 166.5 | -96.6 | 38% |
-| `34_boosting_full_coords_by_type_level_l2` | 48 | – | – | – | 172.9 | -106.3 | 37% |
-| `35_boosting_lux_coords_by_type_per_m2` | 57 | – | – | – | 175.0 | -118.0 | 34% |
-| `36_boosting_lux_coords_by_type_per_m2_imputed` | 57 | – | – | – | 174.3 | -115.1 | 34% |
-| `37_boosting_full_coords_by_type_per_m2_nbr` | 48 | – | – | – | 178.2 | -118.9 | 35% |
-| `38_random_forest_full_by_type_per_m2_nbr` | 48 | – | – | – | 191.6 | -134.3 | 34% |
-| `39_boosting_full_coords_by_type_level_pw3` | 48 | – | – | – | 172.2 | -97.7 | 39% |
-| `40_random_forest_full_by_type_per_m2_pw3` | 46 | – | – | – | 187.6 | -121.8 | 37% |
-| `41_boosting_full_coords_by_type_level_q55` | 48 | – | – | – | 171.0 | -99.3 | 39% |
-| `42_boosting_full_coords_by_type_level_q60` | 48 | – | – | – | 168.6 | -88.4 | 41% |
-| `43_boosting_full_coords_by_type_level_q65` | 48 | 94.9 | 149.9 | 160.1 | 167.8 | -76.8 | 45% |
-| `44_boosting_full_coords_by_type_level_smoter` | 48 | – | – | – | 170.9 | -102.6 | 38% |
-| `45_boosting_core_coords_by_type_level` | 32 | 93.0 | 135.8 | 174.1 | 168.5 | -106.5 | 36% |
-| `46_boosting_full_coords_by_type_level_trunc` | 48 | 94.5 | 145.1 | 171.4 | 169.8 | -100.0 | 36% |
-| `47_random_forest_full_by_type_per_m2_trunc` | 46 | – | – | – | 188.6 | -132.0 | 34% |
-| `48_boosting_core_coords_by_type_level_trunc` | 32 | – | – | – | 168.1 | -88.3 | 38% |
-| `49_en_boosting_core_coords_residual` | 32 | 98.3 | 137.4 | 173.2 | 163.6 | -93.1 | 39% |
-| `50_en_boosting_full_coords_residual_q60` | 48 | – | – | – | 162.2 | -67.8 | 46% |
-| `51_en_boosting_core_coords_residual_q60` | 32 | 99.4 | 139.5 | 165.5 | 159.2 | -69.2 | 45% |
-| `52_en_boosting_core_coords_residual_trunc` | 32 | – | – | – | 219.7 | +0.2 | 44% |
-| `53_boosting_core_coords_by_type_level_q65` | 32 | 97.3 | 142.5 | 162.0 | 162.7 | -69.6 | 46% |
-| `54_en_boosting_core_coords_residual_q65` | 32 | 102.3 | 142.7 | 157.9 | 157.8 | -52.3 | 49% |
-| `55_ensemble_mean_2` | – | – | – | – | 158.5 | -70.3 | 45% |
-| `56_ensemble_mean_3` | – | – | – | – | 160.4 | -82.7 | 41% |
-| `61_en_boosting_lux_core_coords_residual_q65` | 41 | – | – | – | 157.2 | -51.5 | 48% |
-| `62_boosting_core_coords_by_type_level_trunc_up` | 32 | – | – | – | 164.7 | -92.7 | 38% |
-| `63_ensemble_mean_2` | – | – | – | – | 157.7 | -72.5 | 44% |
-| `65_boosting_core_coords_by_type_level_q70` | 32 | 101.6 | 148.9 | 159.0 | 162.9 | -57.9 | 49% |
-| `66_boosting_core_coords_by_type_level_q75` | 32 | 108.2 | 153.1 | 159.7 | 164.0 | -45.0 | 52% |
-| `67_boosting_core_coords_by_type_level_q70_bld` | 32 | 101.2 | 150.1 | 156.6 | 167.1 | -79.8 | 44% |
-| `68_boosting_core_coords_by_type_level_q70_s10` | 32 | – | – | 159.0 | 162.4 | -58.3 | 49% |
-| `70_boosting_core_coords_by_type_level_q70_ft` | 32 | – | 148.8 | 158.6 | 163.0 | -58.8 | 49% |
-| `71_boosting_core_coords_by_type_level_q70_bld30` | 32 | – | 147.8 | 159.1 | 163.3 | -59.2 | 48% |
+| Modelo | Predictores | MAE aleatoria | MAE espacial | MAE tipo Chapinero | MAE nororiental | MAE ponderado | Sesgo nororiental | % sobrepredicho (nororiental) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `01_linear_base` | 8 | 187.4 | 202.2 | 234.8 | 247.0 | 244.8 | -205.3 | 25% |
+| `02_linear_base_text` | 26 | 173.3 | 186.0 | 211.3 | 221.7 | 219.7 | -177.8 | 28% |
+| `03_linear_full` | 46 | 155.8 | 168.1 | 183.3 | 190.0 | 188.7 | -103.8 | 41% |
+| `04_elastic_net_full` | 46 | 132.8 | 159.7 | 172.0 | 179.3 | 178.1 | -107.7 | 37% |
+| `05_cart_full` | 46 | 130.6 | 169.9 | 195.6 | 200.9 | 199.1 | -132.4 | 33% |
+| `06_random_forest_full` | 46 | 93.9 | 147.6 | 180.2 | 193.4 | 191.5 | -137.5 | 33% |
+| `07_random_forest_full_coords` | 48 | 93.0 | 146.6 | 181.2 | 191.6 | 189.8 | -134.5 | 34% |
+| `08_boosting_base_text` | 26 | 124.4 | 150.7 | 181.2 | 192.9 | 190.5 | -158.9 | 24% |
+| `09_boosting_full` | 46 | 96.5 | 145.8 | 182.3 | 177.8 | 176.2 | -120.5 | 33% |
+| `10_boosting_full_coords` | 48 | 95.6 | 145.4 | 179.2 | 174.7 | 173.1 | -113.8 | 35% |
+| `11_neural_net_full` | 46 | 146.8 | 196.6 | 237.2 | 194.8 | 193.0 | -44.9 | 46% |
+| `12_boosting_full_coords_weighted` | 48 | 112.7 | 150.1 | 176.5 | 181.2 | 179.1 | -121.0 | 36% |
+| `13_random_forest_full_weighted` | 46 | 107.1 | 151.2 | 179.2 | 193.9 | 191.8 | -137.8 | 34% |
+| `14_boosting_full_coords_by_type` | 48 | 90.5 | 142.7 | 177.6 | 175.6 | 174.1 | -116.5 | 35% |
+| `15_random_forest_full_by_type` | 46 | 91.5 | 146.8 | 177.5 | 193.7 | 192.0 | -137.7 | 34% |
+| `16_boosting_full_coords_by_type_level` | 48 | 90.8 | 144.5 | 171.2 | 173.0 | 171.5 | -109.8 | 36% |
+| `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | 174.9 | 173.3 | -116.2 | 35% |
+| `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | 189.9 | 188.3 | -134.0 | 34% |
+| `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 144.1 | 174.5 | 173.2 | 171.4 | -115.9 | 35% |
+| `20_random_forest_rich_by_type_per_m2` | 70 | 89.7 | 150.4 | 177.3 | 186.1 | 184.4 | -129.0 | 35% |
+| `21_cart_full_tuned` | 46 | 137.6 | 165.9 | 193.2 | 204.1 | 202.0 | -141.4 | 33% |
+| `22_neural_net_full_tuned` | 46 | 129.8 | 170.6 | 212.0 | 186.8 | 185.6 | -108.1 | 36% |
+| `23_boosting_full_coords_by_type_per_m2_tuned` | 48 | 95.7 | 143.8 | 174.0 | 176.5 | 175.0 | -118.0 | 35% |
+| `24_random_forest_full_by_type_per_m2_tuned` | 46 | 96.0 | 147.2 | 172.7 | 189.9 | 188.3 | -133.8 | 34% |
+| `30_ensemble_median_3` | – | 93.0 | 142.2 | 167.3 | 178.8 | – | -121.4 | 35% |
+| `31_ensemble_mean_3` | – | 99.9 | 142.9 | 164.6 | 177.8 | – | -119.3 | 35% |
+| `33_en_boosting_full_coords_residual` | 48 | 96.8 | 145.3 | 168.4 | 166.5 | 165.2 | -96.6 | 38% |
+| `34_boosting_full_coords_by_type_level_l2` | 48 | – | – | – | 172.9 | 171.3 | -106.3 | 37% |
+| `35_boosting_lux_coords_by_type_per_m2` | 57 | – | – | – | 175.0 | 173.5 | -118.0 | 34% |
+| `36_boosting_lux_coords_by_type_per_m2_imputed` | 57 | – | – | – | 174.3 | 172.6 | -115.1 | 34% |
+| `37_boosting_full_coords_by_type_per_m2_nbr` | 48 | – | – | – | 178.2 | 176.5 | -118.9 | 35% |
+| `38_random_forest_full_by_type_per_m2_nbr` | 48 | – | – | – | 191.6 | 190.0 | -134.3 | 34% |
+| `39_boosting_full_coords_by_type_level_pw3` | 48 | – | – | – | 172.2 | 170.6 | -97.7 | 39% |
+| `40_random_forest_full_by_type_per_m2_pw3` | 46 | – | – | – | 187.6 | 185.9 | -121.8 | 37% |
+| `41_boosting_full_coords_by_type_level_q55` | 48 | – | – | – | 171.0 | 169.5 | -99.3 | 39% |
+| `42_boosting_full_coords_by_type_level_q60` | 48 | – | – | – | 168.6 | 166.9 | -88.4 | 41% |
+| `43_boosting_full_coords_by_type_level_q65` | 48 | 94.9 | 149.9 | 160.1 | 167.8 | 166.1 | -76.8 | 45% |
+| `44_boosting_full_coords_by_type_level_smoter` | 48 | – | – | – | 170.9 | 169.4 | -102.6 | 38% |
+| `45_boosting_core_coords_by_type_level` | 32 | 93.0 | 135.8 | 174.1 | 168.5 | 167.0 | -106.5 | 36% |
+| `46_boosting_full_coords_by_type_level_trunc` | 48 | 94.5 | 145.1 | 171.4 | 169.8 | 168.4 | -100.0 | 36% |
+| `47_random_forest_full_by_type_per_m2_trunc` | 46 | – | – | – | 188.6 | 187.0 | -132.0 | 34% |
+| `48_boosting_core_coords_by_type_level_trunc` | 32 | – | – | – | 168.1 | 166.9 | -88.3 | 38% |
+| `49_en_boosting_core_coords_residual` | 32 | 98.3 | 137.4 | 173.2 | 163.6 | 162.3 | -93.1 | 39% |
+| `50_en_boosting_full_coords_residual_q60` | 48 | – | – | – | 162.2 | 160.9 | -67.8 | 46% |
+| `51_en_boosting_core_coords_residual_q60` | 32 | 99.4 | 139.5 | 165.5 | 159.2 | 157.9 | -69.2 | 45% |
+| `52_en_boosting_core_coords_residual_trunc` | 32 | – | – | – | 219.7 | 217.1 | +0.2 | 44% |
+| `53_boosting_core_coords_by_type_level_q65` | 32 | 97.3 | 142.5 | 162.0 | 162.7 | 161.1 | -69.6 | 46% |
+| `54_en_boosting_core_coords_residual_q65` | 32 | 102.3 | 142.7 | 157.9 | 157.8 | 156.4 | -52.3 | 49% |
+| `55_ensemble_mean_2` | – | – | – | – | 158.5 | – | -70.3 | 45% |
+| `56_ensemble_mean_3` | – | – | – | – | 160.4 | – | -82.7 | 41% |
+| `61_en_boosting_lux_core_coords_residual_q65` | 41 | – | – | – | 157.2 | 155.9 | -51.5 | 48% |
+| `62_boosting_core_coords_by_type_level_trunc_up` | 32 | – | – | – | 164.7 | 163.4 | -92.7 | 38% |
+| `63_ensemble_mean_2` | – | – | – | – | 157.7 | – | -72.5 | 44% |
+| `65_boosting_core_coords_by_type_level_q70` | 32 | 101.6 | 148.9 | 159.0 | 162.9 | 161.3 | -57.9 | 49% |
+| `66_boosting_core_coords_by_type_level_q75` | 32 | 108.2 | 153.1 | 159.7 | 164.0 | 162.4 | -45.0 | 52% |
+| `67_boosting_core_coords_by_type_level_q70_bld` | 32 | 101.2 | 150.1 | 156.6 | 167.1 | 165.6 | -79.8 | 44% |
+| `68_boosting_core_coords_by_type_level_q70_s10` | 32 | – | – | 159.0 | 162.4 | 160.8 | -58.3 | 49% |
+| `70_boosting_core_coords_by_type_level_q70_ft` | 32 | – | 148.8 | 158.6 | 163.0 | 161.3 | -58.8 | 49% |
+| `71_boosting_core_coords_by_type_level_q70_bld30` | 32 | – | 147.8 | 159.1 | 163.3 | 161.6 | -59.2 | 48% |
+| `72_boosting_core_coords_by_type_level_q70_svd20` | 33 | – | 148.8 | 157.0 | 162.8 | 161.3 | -63.3 | 48% |
+| `75_boosting_core_coords_by_type_level_q70_ridge` | 33 | – | 133.1 | 147.0 | 158.4 | 156.6 | -59.2 | 49% |
+| `76_boosting_core_coords_by_type_level_q70_names` | 33 | – | 147.7 | 162.5 | 173.1 | 171.5 | -73.8 | 47% |
+| `77_boosting_ext_core_coords_by_type_level_q70` | 34 | – | 146.0 | 151.2 | 162.7 | 161.1 | -55.0 | 50% |
+| `78_quantile_net_core_coords_by_type_q70` | 32 | – | 164.0 | 156.0 | 156.6 | 155.3 | -46.4 | 49% |
+| `79_quantile_net_core_coords_by_type_q70_smoter` | 32 | – | 167.0 | 156.4 | 157.0 | 155.7 | -28.4 | 54% |
+| `80_boosting_core_coords_by_type_level_q70_tuned` | 32 | – | 146.9 | 161.7 | 161.8 | 160.2 | -61.0 | 48% |
+| `82_boosting_ext_core_coords_by_type_level_q70_ridge` | 35 | – | 132.6 | 142.5 | 157.1 | 155.4 | -56.6 | 49% |
+| `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10` | 35 | – | 131.5 | 142.4 | 156.6 | 154.8 | -55.4 | 50% |
+| `84_ensemble_w90_10_2` | – | – | 132.2 | 141.6 | 155.3 | 153.6 | -54.5 | 50% |
+| `85_ensemble_w80_20_2` | – | – | 133.7 | 141.3 | 154.4 | 152.7 | -53.6 | 51% |

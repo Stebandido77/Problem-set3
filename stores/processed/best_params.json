@@ -23,5 +23,17 @@
     "regressor__lgbmregressor__n_estimators": 1228,
     "regressor__lgbmregressor__num_leaves": 73,
     "regressor__lgbmregressor__reg_lambda": 15.98459788611483
+  },
+  "boosting_core_coords_by_type_level_q70_holdout": {
+    "regressor__lgbmregressor__colsample_bytree": 0.46486706196125344,
+    "regressor__lgbmregressor__learning_rate": 0.03354751440100223,
+    "regressor__lgbmregressor__min_child_samples": 70,
+    "regressor__lgbmregressor__n_estimators": 2258,
+    "regressor__lgbmregressor__num_leaves": 104,
+    "regressor__lgbmregressor__reg_lambda": 0.2784974472861177
+  },
+  "elastic_net_full_holdout": {
+    "regressor__elasticnet__alpha": 0.00021100756851541864,
+    "regressor__elasticnet__l1_ratio": 0.5131101286360047
   }
 }
