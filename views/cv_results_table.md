@@ -55,3 +55,9 @@ Cifras en millones de pesos.
 | `61_en_boosting_lux_core_coords_residual_q65` | 41 | – | – | – | 157.2 | -51.5 | 48% |
 | `62_boosting_core_coords_by_type_level_trunc_up` | 32 | – | – | – | 164.7 | -92.7 | 38% |
 | `63_ensemble_mean_2` | – | – | – | – | 157.7 | -72.5 | 44% |
+| `65_boosting_core_coords_by_type_level_q70` | 32 | 101.6 | 148.9 | 159.0 | 162.9 | -57.9 | 49% |
+| `66_boosting_core_coords_by_type_level_q75` | 32 | 108.2 | 153.1 | 159.7 | 164.0 | -45.0 | 52% |
+| `67_boosting_core_coords_by_type_level_q70_bld` | 32 | 101.2 | 150.1 | 156.6 | 167.1 | -79.8 | 44% |
+| `68_boosting_core_coords_by_type_level_q70_s10` | 32 | – | – | 159.0 | 162.4 | -58.3 | 49% |
+| `70_boosting_core_coords_by_type_level_q70_ft` | 32 | – | 148.8 | 158.6 | 163.0 | -58.8 | 49% |
+| `71_boosting_core_coords_by_type_level_q70_bld30` | 32 | – | 147.8 | 159.1 | 163.3 | -59.2 | 48% |

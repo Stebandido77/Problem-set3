@@ -193,6 +193,12 @@ Cifras en millones de pesos.
 | `61_en_boosting_lux_core_coords_residual_q65` | 41 | – | – | – | 157.2 | -51.5 | 48% |
 | `62_boosting_core_coords_by_type_level_trunc_up` | 32 | – | – | – | 164.7 | -92.7 | 38% |
 | `63_ensemble_mean_2` | – | – | – | – | 157.7 | -72.5 | 44% |
+| `65_boosting_core_coords_by_type_level_q70` | 32 | 101.6 | 148.9 | 159.0 | 162.9 | -57.9 | 49% |
+| `66_boosting_core_coords_by_type_level_q75` | 32 | 108.2 | 153.1 | 159.7 | 164.0 | -45.0 | 52% |
+| `67_boosting_core_coords_by_type_level_q70_bld` | 32 | 101.2 | 150.1 | 156.6 | 167.1 | -79.8 | 44% |
+| `68_boosting_core_coords_by_type_level_q70_s10` | 32 | – | – | 159.0 | 162.4 | -58.3 | 49% |
+| `70_boosting_core_coords_by_type_level_q70_ft` | 32 | – | 148.8 | 158.6 | 163.0 | -58.8 | 49% |
+| `71_boosting_core_coords_by_type_level_q70_bld30` | 32 | – | 147.8 | 159.1 | 163.3 | -59.2 | 48% |
 
 Modelos ingenuos (`views/cv_results_naive.csv`): la mediana constante da 236.7 / 248.9 / 298.1
 y la mediana por tipo y alcobas 217.7 / 242.6 / 289.2 (aleatoria / espacial / tipo Chapinero).
@@ -210,6 +216,15 @@ como se subió (los envíos 10 y 11, sin OSM), con `08_calibrate_holdout.py`
 | `31_ensemble_mean_3` | 189.3 | 177.8 | 164.6 |
 | `10_boosting_full_coords` | 180.1 | 169.8 | 182.2 |
 | `32_boosting_full_coords_x115` | 171.7 | 161.7 | 162.4 |
+| `49_en_boosting_core_coords_residual` | 184.1 | 163.6 | 173.2 |
+| `54_en_boosting_core_coords_residual_q65` | 173.3 | 157.8 | 157.9 |
+| `53_boosting_core_coords_by_type_level_q65` | 161.7 | 162.7 | 162.0 |
+| `65_boosting_core_coords_by_type_level_q70` | 160.9 | 162.9 | 159.0 |
+
+Los envíos 49 a 65 se evaluaron directamente en `views/cv_results.csv`, sin pasar por 08.
+Con ellos el holdout nororiental ya no ordena bien: pone el 54 (157.8) por delante del 53
+(162.7) y del 65 (162.9), y en Kaggle el 54 queda 12 M detrás. Diferencias de pocos millones
+en el holdout no sirven para escoger envíos.
 
 El holdout nororiental pone los cinco en el mismo orden que Kaggle (Spearman 1). También
 reproduce las diferencias: el ×1,15 mejora 8,1 M (8,5 en Kaggle) y el ensamble 31 pierde
