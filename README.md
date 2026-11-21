@@ -75,6 +75,9 @@ Dos archivos pesados no se versionan y se regeneran con los scripts:
 - `stores/processed/oof_predictions.csv`, con las predicciones fuera de muestra y del
   holdout de cada especificación. Lo escribe `04_train_models.py`: cada corrida agrega o
   reemplaza las columnas de las especificaciones y los esquemas que corre.
+- `stores/processed/text_embeddings.npz`, con los embeddings de título y descripción. Lo
+  escribe `13_text_embeddings.py` (unos 20 minutos en CPU; descarga
+  `intfloat/multilingual-e5-small` de Hugging Face la primera vez).
 
 ## Datos y predictores
 

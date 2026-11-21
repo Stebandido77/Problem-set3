@@ -7,3 +7,4 @@ __pycache__/
 stores/external/
 
 stores/processed/oof_predictions.csv
+stores/processed/text_embeddings.npz

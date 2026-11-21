@@ -332,6 +332,167 @@ class TextFeatures(RegressorMixin, BaseEstimator):
         return self.model_.predict(self.transform_text(X))
 
 
+RAW_TEXT_COLUMNS = ["text", "title_text", "desc_text"]
+
+
+class RidgeText(BaseEstimator):
+    """Fuente de texto de TextPredictors: ridge del log del precio sobre el TF-IDF de una
+    columna. Con 'by_type', un ridge para apartamentos y otro para casas (el vocabulario es
+    común). Con los valores por defecto es el txt_ridge de TextFeatures (fila 75)."""
+
+    def __init__(self, name="txt_ridge", column="text", analyzer="word", ngram_range=(1, 2),
+                 min_df=5, max_features=100_000, alpha=3.0, by_type=False):
+        self.name = name
+        self.column = column
+        self.analyzer = analyzer
+        self.ngram_range = ngram_range
+        self.min_df = min_df
+        self.max_features = max_features
+        self.alpha = alpha
+        self.by_type = by_type
+
+    def inputs(self):
+        return [self.column]
+
+    def _kinds(self, X):
+        """Etiqueta de cada fila: el tipo de inmueble o una sola clase."""
+        return X["is_house"].to_numpy() if self.by_type else np.zeros(len(X))
+
+    def _fit_ridges(self, tfidf, log_y, kinds):
+        return {kind: Ridge(alpha=self.alpha).fit(tfidf[kinds == kind], log_y[kinds == kind])
+                for kind in np.unique(kinds)}
+
+    @staticmethod
+    def _predict(ridges, tfidf, kinds):
+        out = np.zeros(tfidf.shape[0])
+        for kind, ridge in ridges.items():
+            if (kinds == kind).any():
+                out[kinds == kind] = ridge.predict(tfidf[kinds == kind])
+        return out
+
+    def fit_features(self, X, log_y, folds):
+        """Ajusta con todo el ajuste y devuelve el predictor fuera de muestra de sus filas."""
+        self.tfidf_ = TfidfVectorizer(analyzer=self.analyzer, ngram_range=self.ngram_range,
+                                      min_df=self.min_df, max_features=self.max_features,
+                                      sublinear_tf=True, strip_accents="unicode",
+                                      dtype=np.float32).fit(X[self.column])
+        tfidf = self.tfidf_.transform(X[self.column])
+        kinds = self._kinds(X)
+        self.ridges_ = self._fit_ridges(tfidf, log_y, kinds)
+        out = np.zeros(len(log_y))
+        for fit_idx, pred_idx in folds:
+            ridges = self._fit_ridges(tfidf[fit_idx], log_y[fit_idx], kinds[fit_idx])
+            out[pred_idx] = self._predict(ridges, tfidf[pred_idx], kinds[pred_idx])
+        return {self.name: out}
+
+    def transform(self, X):
+        tfidf = self.tfidf_.transform(X[self.column])
+        return {self.name: self._predict(self.ridges_, tfidf, self._kinds(X))}
+
+
+def embedding_inputs():
+    from utils import embedding_columns
+    return embedding_columns("title") + embedding_columns("desc")
+
+
+class EmbeddingNet(BaseEstimator):
+    """Fuente de texto de TextPredictors: red con pérdida cuantílica ('alpha') sobre los
+    embeddings de título y descripción, una por tipo de inmueble. Cada fila del ajuste
+    recibe la predicción de las redes de las particiones que no la vieron; las filas nuevas,
+    el promedio de esas redes."""
+
+    def __init__(self, name="txt_net", alpha=0.70, hidden=(256, 64), dropout=0.2,
+                 n_seeds=1):
+        self.name = name
+        self.alpha = alpha
+        self.hidden = hidden
+        self.dropout = dropout
+        self.n_seeds = n_seeds
+
+    def inputs(self):
+        return embedding_inputs()
+
+    def _net(self):
+        return ByPropertyType(QuantileNet(alpha=self.alpha, hidden=self.hidden,
+                                          dropout=self.dropout, n_seeds=self.n_seeds))
+
+    def fit_features(self, X, log_y, folds):
+        Z = X[self.inputs() + ["is_house"]]
+        y = np.exp(log_y)
+        out = np.zeros(len(y))
+        self.nets_ = []
+        for fit_idx, pred_idx in folds:
+            net = self._net().fit(Z.iloc[fit_idx], y[fit_idx])
+            out[pred_idx] = net.predict(Z.iloc[pred_idx])
+            self.nets_.append(net)
+        return {self.name: np.log(np.clip(out, 1e7, None))}
+
+    def transform(self, X):
+        Z = X[self.inputs() + ["is_house"]]
+        pred = np.mean([net.predict(Z) for net in self.nets_], axis=0)
+        return {self.name: np.log(np.clip(pred, 1e7, None))}
+
+
+class EmbeddingSVD(BaseEstimator):
+    """Fuente de texto de TextPredictors: los primeros 'n_components' componentes de una SVD
+    de los embeddings de título y descripción, ajustada con las filas de ajuste. No usa el
+    precio, así que no necesita particiones."""
+
+    def __init__(self, n_components=20):
+        self.n_components = n_components
+
+    def inputs(self):
+        return embedding_inputs()
+
+    def fit_features(self, X, log_y, folds):
+        self.svd_ = TruncatedSVD(self.n_components, random_state=SEED).fit(X[self.inputs()])
+        return self.transform(X)
+
+    def transform(self, X):
+        components = self.svd_.transform(X[self.inputs()])
+        return {f"emb_svd_{k}": components[:, k] for k in range(self.n_components)}
+
+
+class TextPredictors(RegressorMixin, BaseEstimator):
+    """Varios predictores de texto ('sources': RidgeText, EmbeddingNet, EmbeddingSVD) que
+    alimentan al modelo. Todas las fuentes comparten las mismas 5 particiones internas del
+    ajuste, con los gemelos (mismo inmueble o mismo texto) siempre juntos, así que el
+    predictor de una fila de ajuste nunca vio su precio. Las columnas crudas de texto y de
+    embeddings no llegan al modelo."""
+
+    def __init__(self, model, sources=()):
+        self.model = model
+        self.sources = sources
+
+    def _drop_raw(self, X):
+        raw = [c for c in X.columns if c in RAW_TEXT_COLUMNS or c.startswith("emb_")]
+        return X.drop(columns=raw)
+
+    def fit_text(self, X, y):
+        """Ajusta las fuentes y devuelve el ajuste con sus predictores fuera de muestra."""
+        log_y = np.log(np.asarray(y, dtype=float))
+        folds = list(GroupKFold(n_splits=5, shuffle=True, random_state=SEED).split(
+            X, groups=twin_groups(X)))
+        self.sources_ = [clone(source) for source in self.sources]
+        features = {}
+        for source in self.sources_:
+            features.update(source.fit_features(X, log_y, folds))
+        return self._drop_raw(X).assign(**features)
+
+    def fit(self, X, y, sample_weight=None):
+        self.model_ = fit_model(clone(self.model), self.fit_text(X, y), y, sample_weight)
+        return self
+
+    def transform_text(self, X):
+        features = {}
+        for source in self.sources_:
+            features.update(source.transform(X))
+        return self._drop_raw(X).assign(**features)
+
+    def predict(self, X):
+        return self.model_.predict(self.transform_text(X))
+
+
 class NameLevel(RegressorMixin, BaseEstimator):
     """Nivel de precio del nombre de barrio o edificio del título ('title_name', de
     02_build_features.py): media del log del precio de los anuncios de ajuste con el mismo

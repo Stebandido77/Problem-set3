@@ -27,11 +27,12 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from models import (FAMILIES, ByPropertyType, FocusFineTune, ImputedArea, NameLevel,
-                    NeighborhoodLevel, PriceWeighted, QuantileNet, ResidualBoosting,
-                    SameBuilding, SeedAverage, SyntheticTail, TextFeatures, TruncationCorrection,
-                    build_model, fit_model, load_best_params, northeast_building_groups)
-from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR,
+from models import (FAMILIES, ByPropertyType, EmbeddingNet, EmbeddingSVD, FocusFineTune,
+                    ImputedArea, NameLevel, NeighborhoodLevel, PriceWeighted, QuantileNet,
+                    ResidualBoosting, RidgeText, SameBuilding, SeedAverage, SyntheticTail,
+                    TextFeatures, TextPredictors, TruncationCorrection, build_model,
+                    fit_model, load_best_params, northeast_building_groups)
+from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, add_embeddings,
                    chapinero_holdout, error_summary, feature_sets, load_processed,
                    northeast_holdout, random_cv, random_twin_splits, save_submission,
                    similarity_weights, spatial_cv_splits, weighted_mae)
@@ -74,6 +75,8 @@ class Spec:
     fine_tune: bool = False      # sigue entrenando cerca de la Zona T (FocusFineTune)
     text: str = ""               # texto completo: 'svd20', 'svd50', 'svd100' o 'ridge'
     names: bool = False          # nivel del barrio o edificio del título (NameLevel)
+    text_sources: tuple = ()     # fuentes de TEXT_SOURCES que alimentan al modelo
+                                 # (TextPredictors, ronda 4)
     tune_key: str = ""           # clave de best_params.json si no es '<familia>_<conjunto>'
 
     def name(self, number):
@@ -254,6 +257,37 @@ ROUND_3C = [
     Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_s10", text="ridge",
          n_seeds=10, **Q70),
 ]
+# Ronda 4: mejor lectura del texto, sobre la receta de la 75 (solo texto con ridge, una
+# semilla) para medir cada paso contra ella. Criterio: holdout ponderado y validación espacial.
+ROUND_4_START = 86
+ROUND_4 = [
+    # Paso 1. Red cuantílica por tipo sobre embeddings de frases (13_text_embeddings.py):
+    # en lugar del ridge, además del ridge, y la SVD de los embeddings además del ridge.
+    Spec("boosting", "core_coords", "by_type_level_q70_net", text_sources=("net",), **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_net",
+         text_sources=("ridge", "net"), **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_esvd20",
+         text_sources=("ridge", "emb_svd20"), **Q70),
+    # Paso 2. a) ridge con alfa, min_df y n-gramas escogidos en 14_tune_text_ridge.py;
+    # b) un ridge por tipo; c) título y descripción con su propio ridge; d) el ridge de
+    # palabras más uno de n-gramas de caracteres (3 a 5).
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_tuned",
+         text_sources=("ridge_tuned",), **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_type",
+         text_sources=("ridge_type",), **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_title_desc",
+         text_sources=("ridge_title", "ridge_desc"), **Q70),
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_char",
+         text_sources=("ridge", "ridge_char"), **Q70),
+    # Paso 3. Lo que ayudó en algún criterio sin empeorar el otro: la red (87, −2,5 en la
+    # espacial) y el ridge por tipo (90, −0,6 en el ponderado), junto al ridge.
+    Spec("boosting", "core_coords", "by_type_level_q70_ridge_type_net",
+         text_sources=("ridge", "ridge_type", "net"), **Q70),
+    # La 93 con la receta de la 83 (estrato y valor del terreno, 10 semillas): candidata a
+    # envío frente a la 83 y punto de partida de la pieza B.
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_type_net_s10",
+         text_sources=("ridge", "ridge_type", "net"), n_seeds=10, **Q70),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -261,7 +295,28 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2C, start=ROUND_2C_START)),
                   **dict(enumerate(ROUND_3, start=ROUND_3_START)),
                   **dict(enumerate(ROUND_3B, start=ROUND_3B_START)),
-                  **dict(enumerate(ROUND_3C, start=ROUND_3C_START))}
+                  **dict(enumerate(ROUND_3C, start=ROUND_3C_START)),
+                  **dict(enumerate(ROUND_4, start=ROUND_4_START))}
+
+
+# Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
+# calcula con particiones internas del ajuste.
+TUNED_RIDGE = {k: tuple(v) if isinstance(v, list) else v
+               for k, v in load_best_params().get("text_ridge", {}).items()}
+TEXT_SOURCES = {
+    # El txt_ridge de la fila 75: palabras y bigramas, min_df 5, alfa 3.
+    "ridge": RidgeText(),
+    # Paso 1: red cuantílica por tipo sobre los embeddings, y SVD de los embeddings.
+    "net": EmbeddingNet(),
+    "emb_svd20": EmbeddingSVD(20),
+    # Paso 2: ridge sintonizado en 14_tune_text_ridge.py (clave 'text_ridge'), ridge por tipo, título y descripción por separado, n-gramas de caracteres.
+    "ridge_tuned": RidgeText(**TUNED_RIDGE),
+    "ridge_type": RidgeText(name="txt_ridge_type", by_type=True),
+    "ridge_title": RidgeText(name="txt_ridge_title", column="title_text", min_df=3),
+    "ridge_desc": RidgeText(name="txt_ridge_desc", column="desc_text"),
+    "ridge_char": RidgeText(name="txt_ridge_char", analyzer="char_wb", ngram_range=(3, 5),
+                            max_features=300_000, alpha=10.0),
+}
 
 
 def build_spec_model(spec, params):
@@ -300,6 +355,8 @@ def build_spec_model(spec, params):
         model = TextFeatures(model, mode=mode, n_components=n_components)
     if spec.names:
         model = NameLevel(model)
+    if spec.text_sources:
+        model = TextPredictors(model, [TEXT_SOURCES[key] for key in spec.text_sources])
     return model
 
 
@@ -313,6 +370,10 @@ def spec_features(spec, sets):
         features = features + ["text"]
     if spec.names:
         features = features + ["title_name"]
+    if spec.text_sources:
+        inputs = ["text"] + [c for key in spec.text_sources
+                             for c in TEXT_SOURCES[key].inputs()]
+        features = features + list(dict.fromkeys(inputs))
     return features
 
 
@@ -364,6 +425,11 @@ def main():
     args = parser.parse_args()
 
     train, test = load_processed()
+    selected = [spec for number, spec in NUMBERED_SPECS.items()
+                if spec.family in args.families and (not args.specs or number in args.specs)]
+    if any(c.startswith("emb_") for spec in selected
+           for key in spec.text_sources for c in TEXT_SOURCES[key].inputs()):
+        train, test = add_embeddings(train, test)
     y = train[TARGET]
     sets = feature_sets(train.columns)
     best_params = load_best_params()

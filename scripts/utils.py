@@ -37,6 +37,8 @@ VIEWS_DIR = ROOT / "views"
 OSM_POIS_PATH = PROCESSED_DIR / "osm_pois.csv"
 BEST_PARAMS_PATH = PROCESSED_DIR / "best_params.json"
 BOGOTA_BLOCKS_PATH = PROCESSED_DIR / "bogota_blocks.csv"
+EMBEDDINGS_PATH = PROCESSED_DIR / "text_embeddings.npz"
+EMBEDDING_DIM = 384   # dimensión de multilingual-e5-small (13_text_embeddings.py)
 
 ID_COL = "property_id"
 TARGET = "price"
@@ -95,14 +97,36 @@ def load_raw():
 def load_processed():
     """Lee las bases con predictores construidas por 02_build_features.py, más el texto
     crudo del anuncio (título y descripción) en la columna 'text' para los modelos que lo
-    convierten en predictores dentro de cada partición."""
+    convierten en predictores dentro de cada partición; 'title_text' y 'desc_text' traen
+    cada parte por separado."""
     train = pd.read_csv(PROCESSED_DIR / "train_features.csv")
     test = pd.read_csv(PROCESSED_DIR / "test_features.csv")
     raw_train, raw_test = load_raw()
     for df, raw in [(train, raw_train), (test, raw_test)]:
         text = raw["title"].fillna("") + " " + raw["description"].fillna("")
         df["text"] = df[ID_COL].map(dict(zip(raw[ID_COL], text)))
+        for column, source in [("title_text", "title"), ("desc_text", "description")]:
+            df[column] = df[ID_COL].map(dict(zip(raw[ID_COL], raw[source].fillna(""))))
     return train, test
+
+
+def embedding_columns(prefix):
+    """Nombres de las columnas de embeddings ('emb_title_k' o 'emb_desc_k')."""
+    return [f"emb_{prefix}_{k}" for k in range(EMBEDDING_DIM)]
+
+
+def add_embeddings(*frames):
+    """Agrega a cada base los embeddings de título y descripción de 13_text_embeddings.py,
+    alineados por property_id. No usan el precio."""
+    stored = np.load(EMBEDDINGS_PATH, allow_pickle=True)
+    position = pd.Series(np.arange(len(stored["ids"])), index=stored["ids"])
+    out = []
+    for df in frames:
+        rows = position.loc[df[ID_COL]].to_numpy()
+        blocks = [pd.DataFrame(stored[part][rows], columns=embedding_columns(part),
+                               index=df.index) for part in ("title", "desc")]
+        out.append(pd.concat([df] + blocks, axis=1))
+    return out
 
 
 def osm_feature_names(columns, extra=False):
