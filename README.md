@@ -208,7 +208,7 @@ Cifras en millones de pesos.
 | `70_boosting_core_coords_by_type_level_q70_ft` | 32 | – | 148.8 | 158.6 | 163.0 | 161.3 | -58.8 | 49% |
 | `71_boosting_core_coords_by_type_level_q70_bld30` | 32 | – | 147.8 | 159.1 | 163.3 | 161.6 | -59.2 | 48% |
 | `72_boosting_core_coords_by_type_level_q70_svd20` | 33 | – | 148.8 | 157.0 | 162.8 | 161.3 | -63.3 | 48% |
-| `75_boosting_core_coords_by_type_level_q70_ridge` | 33 | – | 133.1 | 147.0 | 158.4 | 156.6 | -59.2 | 49% |
+| `75_boosting_core_coords_by_type_level_q70_ridge` | 33 | – | 133.0 | 148.5 | 157.4 | 155.6 | -56.5 | 49% |
 | `76_boosting_core_coords_by_type_level_q70_names` | 33 | – | 147.7 | 162.5 | 173.1 | 171.5 | -73.8 | 47% |
 | `77_boosting_ext_core_coords_by_type_level_q70` | 34 | – | 146.0 | 151.2 | 162.7 | 161.1 | -55.0 | 50% |
 | `78_quantile_net_core_coords_by_type_q70` | 32 | – | 164.0 | 156.0 | 156.6 | 155.3 | -46.4 | 49% |
