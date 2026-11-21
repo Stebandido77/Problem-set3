@@ -81,5 +81,12 @@
     "regressor__quantileshift__regressor__alpha": 0.0025352851143500667,
     "regressor__quantileshift__regressor__l1_ratio": 0.6575532292934886,
     "regressor__splinedesign__n_knots_geo": 8
+  },
+  "random_forest_ga": {
+    "regressor__randomforestquantileregressor__n_estimators": 200,
+    "regressor__randomforestquantileregressor__max_depth": 29,
+    "regressor__randomforestquantileregressor__min_samples_leaf": 3,
+    "regressor__randomforestquantileregressor__max_features": 0.3402258579572869,
+    "regressor__randomforestquantileregressor__max_samples": 0.7615502531243068
   }
 }
