@@ -336,6 +336,14 @@ como se subió (los envíos 10 y 11, sin OSM), con `08_calibrate_holdout.py`
 | `75_boosting_core_coords_by_type_level_q70_ridge_v2` | 153.1 | 157.4 | 148.5 |
 | `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10_v2` | 152.1 | 156.6 | 142.4 |
 | `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | 153.4 | 154.6 | sin calcular |
+| `114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords` | 158.9 | 161.3 | 147.5 |
+| `105_cart_ext_core_coords_by_type_level_q70_ridge_tuned` | 177.5 | 170.3 | 169.3 |
+| `108_linear_ext_core_coords_splines_by_type_level_q70_ridge_oof` | 180.5 | 167.6 | 157.8 |
+
+Con el holdout ponderado (`mae_weighted`) frente a Kaggle: boosting 83 154,8 contra 152,1 y
+bosque 114 159,6 contra 158,9 (acierta); CART 105 168,7 contra 177,5 y lineal 108 166,0
+contra 180,5 (optimista en 9 a 15 M). El lineal con splines de coordenadas viaja mal a
+Chapinero.
 
 El texto completo del anuncio (ridge sobre TF-IDF, envío 75) explica 7,9 de los 8,9 M que
 gana el 83 frente al 65 en Kaggle. El estrato y el valor del terreno por manzana, junto con
