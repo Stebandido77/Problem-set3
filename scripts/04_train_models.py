@@ -31,7 +31,7 @@ from models import (FAMILIES, ByPropertyType, DropColumns, EmbeddingNet, Embeddi
                     FocusFineTune, ImputedArea, NameLevel, NeighborhoodLevel, PriceWeighted,
                     QuantileNet,
                     ResidualBoosting, RidgeText, RoundColumns, TailOversample, SameBuilding, SeedAverage, SyntheticTail,
-                    TextFeatures, TextPredictors, TruncationCorrection, build_model,
+                    TextFeatures, TextNet, TextPredictors, TruncationCorrection, build_model,
                     fit_model, load_best_params, northeast_building_groups)
 from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, add_embeddings,
                    chapinero_holdout, error_summary, feature_sets, load_processed,
@@ -456,6 +456,13 @@ ROUND_7D = [
     Spec("quantile_net", "ext_core_coords", "by_type_q70_ridge_nocoords", target="level",
          by_type=True, text_sources=("ridge",), drop_coords=True),
 ]
+# Pieza D: la red sobre el TF-IDF del ridge, sintonizada con NSGA-II (22_text_nets.py,
+# clave 'text_net_ga'), junto al ridge dentro de la receta de la 82.
+ROUND_7E_START = 149
+ROUND_7E = [
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_tfidfnet",
+         text_sources=("ridge", "tfidf_ga"), **Q70),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -470,7 +477,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_7, start=ROUND_7_START)),
                   **dict(enumerate(ROUND_7B, start=ROUND_7B_START)),
                   **dict(enumerate(ROUND_7C, start=ROUND_7C_START)),
-                  **dict(enumerate(ROUND_7D, start=ROUND_7D_START))}
+                  **dict(enumerate(ROUND_7D, start=ROUND_7D_START)),
+                  **dict(enumerate(ROUND_7E, start=ROUND_7E_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -492,6 +500,12 @@ TEXT_SOURCES = {
     "ridge_char": RidgeText(name="txt_ridge_char", analyzer="char_wb", ngram_range=(3, 5),
                             max_features=300_000, alpha=10.0),
 }
+# Ronda 7, pieza D: red sobre el TF-IDF con los hiperparámetros del genético
+# (22_text_nets.py --tune). Sin esa clave la fuente no existe y la fila 149 no corre.
+if "text_net_ga" in load_best_params():
+    TEXT_SOURCES["tfidf_ga"] = TextNet(name="txt_tfidf_net", **{
+        k: tuple(v) if isinstance(v, list) else v
+        for k, v in load_best_params()["text_net_ga"].items()})
 
 
 def build_spec_model(spec, params):

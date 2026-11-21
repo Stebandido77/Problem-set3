@@ -88,5 +88,14 @@
     "regressor__randomforestquantileregressor__min_samples_leaf": 3,
     "regressor__randomforestquantileregressor__max_features": 0.3402258579572869,
     "regressor__randomforestquantileregressor__max_samples": 0.7615502531243068
+  },
+  "text_net_ga": {
+    "representation": "tfidf",
+    "embed_dim": 32,
+    "hidden": [],
+    "dropout": 0.2320654823389192,
+    "lr": 0.006756233794062202,
+    "weight_decay": 0.00022103444128221682,
+    "max_epochs": 18
   }
 }
