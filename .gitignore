@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 
 stores/external/
+
+stores/processed/oof_predictions.csv
