@@ -10,7 +10,7 @@ Salida: stores/processed/text_embeddings.npz (no se versiona: pesa unos 150 MB),
   title, desc     matrices float32 de n x 384, normalizadas a norma 1
 
 Uso:
-  python 13_text_embeddings.py                 # unos 10-15 minutos en CPU
+  python 13_text_embeddings.py                 # unos 20 minutos en CPU (16 núcleos)
   python 13_text_embeddings.py --limit 500     # prueba rápida con pocas filas
 """
 
@@ -24,6 +24,8 @@ from utils import EMBEDDINGS_PATH, ID_COL, load_raw
 
 # multilingual-e5-small: 384 dimensiones, hasta 512 tokens, entrenado en ~100 idiomas.
 MODEL_NAME = "intfloat/multilingual-e5-small"
+# Versión del modelo en Hugging Face con la que se calcularon los embeddings de la ronda 4.
+MODEL_REVISION = "614241f622f53c4eeff9890bdc4f31cfecc418b3"
 MAX_TOKENS = 256
 BATCH_SIZE = 64
 
@@ -41,13 +43,11 @@ def main():
     args = parser.parse_args()
 
     from sentence_transformers import SentenceTransformer
-    import torch
-    torch.set_num_threads(16)
     train, test = load_raw()
     rows = pd.concat([train, test], ignore_index=True)
     if args.limit:
         rows = rows.head(args.limit)
-    model = SentenceTransformer(MODEL_NAME, device="cpu")
+    model = SentenceTransformer(MODEL_NAME, revision=MODEL_REVISION, device="cpu")
     model.max_seq_length = MAX_TOKENS
     start = time.time()
     title = encode(model, rows["title"].fillna("").tolist())

@@ -6,6 +6,10 @@ MAE del log del precio en 5 particiones que dejan juntos a los gemelos, que es c
 calcula txt_ridge dentro de cada ajuste. El ganador se guarda en best_params.json con la
 clave 'text_ridge' y lo usa la fuente 'ridge_tuned' de 04_train_models.py.
 
+Ojo: las filas de ajuste del holdout son casi todo train, así que la validación espacial de
+la fila 89 queda algo optimista (los parámetros se escogieron viendo esas filas). El
+ganador quedó en la esquina de la rejilla (alfa 0,3, min_df 2, n-gramas 1-3).
+
 Salida: views/tuning_text_ridge.csv
 Uso: python 14_tune_text_ridge.py
 """
@@ -22,7 +26,8 @@ from models import RidgeText, load_best_params
 from utils import (BEST_PARAMS_PATH, SEED, TARGET, VIEWS_DIR, load_processed,
                    northeast_holdout, twin_groups)
 
-GRID = {"alpha": [0.3, 1.0, 3.0, 10.0], "min_df": [2, 5], "ngram_range": [(1, 1), (1, 2), (1, 3)]}
+GRID = {"alpha": [0.3, 1.0, 3.0, 10.0], "min_df": [2, 5],
+        "ngram_range": [(1, 1), (1, 2), (1, 3)]}
 MAX_FEATURES = 200_000
 
 

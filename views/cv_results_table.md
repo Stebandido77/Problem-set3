@@ -72,3 +72,15 @@ Cifras en millones de pesos.
 | `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10` | 35 | – | 131.5 | 142.4 | 156.6 | 154.8 | -55.4 | 50% |
 | `84_ensemble_w90_10_2` | – | – | 132.2 | 141.6 | 155.3 | 153.6 | -54.5 | 50% |
 | `85_ensemble_w80_20_2` | – | – | 133.7 | 141.3 | 154.4 | 152.7 | -53.6 | 51% |
+| `86_boosting_core_coords_by_type_level_q70_net` | 801 | – | 136.8 | – | 160.6 | 158.8 | -59.3 | 49% |
+| `87_boosting_core_coords_by_type_level_q70_ridge_net` | 801 | – | 130.5 | – | 158.0 | 156.2 | -56.7 | 50% |
+| `88_boosting_core_coords_by_type_level_q70_ridge_esvd20` | 801 | – | 136.5 | – | 158.5 | 156.7 | -60.8 | 48% |
+| `89_boosting_core_coords_by_type_level_q70_ridge_tuned` | 33 | – | 134.5 | – | 156.7 | 154.9 | -57.1 | 49% |
+| `90_boosting_core_coords_by_type_level_q70_ridge_type` | 33 | – | 133.4 | – | 156.8 | 155.1 | -54.7 | 50% |
+| `91_boosting_core_coords_by_type_level_q70_ridge_title_desc` | 35 | – | 133.7 | – | 158.2 | 156.4 | -55.9 | 50% |
+| `92_boosting_core_coords_by_type_level_q70_ridge_char` | 33 | – | 133.5 | – | 157.3 | 155.5 | -56.9 | 49% |
+| `93_boosting_core_coords_by_type_level_q70_ridge_type_net` | 801 | – | 131.3 | – | 156.6 | 154.8 | -54.4 | 50% |
+| `94_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10` | 803 | – | 129.6 | – | 156.2 | 154.5 | -53.5 | 51% |
+| `95_catboost_ext_core_coords_by_type_level_q70_ridge_type_net` | 803 | – | 132.3 | – | 158.9 | 157.2 | -67.4 | 48% |
+| `96_xgboost_ext_core_coords_by_type_level_q70_ridge_type_net` | 803 | – | 133.0 | – | 157.1 | 155.4 | -52.4 | 51% |
+| `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | 803 | – | 128.6 | – | 154.6 | 152.9 | -53.8 | 51% |

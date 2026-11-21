@@ -260,6 +260,12 @@ ROUND_3C = [
 # Ronda 4: mejor lectura del texto, sobre la receta de la 75 (solo texto con ridge, una
 # semilla) para medir cada paso contra ella. Criterio: holdout ponderado y validación espacial.
 ROUND_4_START = 86
+# Cuantil 0,70 en las otras dos librerías de boosting (pieza C).
+CATBOOST_Q70 = dict(target="level", by_type=True, params=(
+    ("regressor__catboostregressor__loss_function", "Quantile:alpha=0.7"),))
+XGBOOST_Q70 = dict(target="level", by_type=True, params=(
+    ("regressor__xgbregressor__objective", "reg:quantileerror"),
+    ("regressor__xgbregressor__quantile_alpha", 0.70)))
 ROUND_4 = [
     # Paso 1. Red cuantílica por tipo sobre embeddings de frases (13_text_embeddings.py):
     # en lugar del ridge, además del ridge, y la SVD de los embeddings además del ridge.
@@ -287,6 +293,18 @@ ROUND_4 = [
     # envío frente a la 83 y punto de partida de la pieza B.
     Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_type_net_s10",
          text_sources=("ridge", "ridge_type", "net"), n_seeds=10, **Q70),
+    # Pieza C. CatBoost y XGBoost con la receta y los predictores de la 94, una semilla.
+    Spec("catboost", "ext_core_coords", "by_type_level_q70_ridge_type_net",
+         text_sources=("ridge", "ridge_type", "net"), **CATBOOST_Q70),
+    Spec("xgboost", "ext_core_coords", "by_type_level_q70_ridge_type_net",
+         text_sources=("ridge", "ridge_type", "net"), **XGBOOST_Q70),
+    # Pieza D. La 94 con el área del lote, los pisos y el área construida del predio.
+    Spec("boosting", "lot_core_coords", "by_type_level_q70_ridge_type_net_s10",
+         text_sources=("ridge", "ridge_type", "net"), n_seeds=10, **Q70),
+    # Pieza B. La 94 con los hiperparámetros que encontró TPE (15_optuna_search.py).
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_type_net_s10_tpe",
+         text_sources=("ridge", "ridge_type", "net"), n_seeds=10, tuned=True,
+         tune_key="optuna_tpe", **Q70),
 ]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
@@ -309,7 +327,8 @@ TEXT_SOURCES = {
     # Paso 1: red cuantílica por tipo sobre los embeddings, y SVD de los embeddings.
     "net": EmbeddingNet(),
     "emb_svd20": EmbeddingSVD(20),
-    # Paso 2: ridge sintonizado en 14_tune_text_ridge.py (clave 'text_ridge'), ridge por tipo, título y descripción por separado, n-gramas de caracteres.
+    # Paso 2: ridge sintonizado en 14_tune_text_ridge.py (clave 'text_ridge'), ridge por
+    # tipo, título y descripción por separado, n-gramas de caracteres.
     "ridge_tuned": RidgeText(**TUNED_RIDGE),
     "ridge_type": RidgeText(name="txt_ridge_type", by_type=True),
     "ridge_title": RidgeText(name="txt_ridge_title", column="title_text", min_df=3),
@@ -414,8 +433,9 @@ def update_table(path, new, key):
 
 def main():
     parser = argparse.ArgumentParser()
-    # El híbrido de 33 combina dos familias; la red cuantílica es la red de la ronda 3.
-    families = FAMILIES + ["en_boosting", "quantile_net"]
+    # El híbrido de 33 combina dos familias; la red cuantílica es la red de la ronda 3;
+    # CatBoost y XGBoost son la pieza C de la ronda 4.
+    families = FAMILIES + ["en_boosting", "quantile_net", "catboost", "xgboost"]
     parser.add_argument("--families", nargs="+", default=families, choices=families)
     parser.add_argument("--specs", nargs="+", type=int, help="números de SPECS a correr")
     parser.add_argument("--schemes", nargs="+", default=list(SCHEMES), choices=list(SCHEMES),

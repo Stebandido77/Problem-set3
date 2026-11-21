@@ -11,6 +11,7 @@ import json
 
 import numpy as np
 import pandas as pd
+from joblib import Memory
 from lightgbm import LGBMRegressor
 from scipy.special import ndtr, ndtri
 from scipy.stats import loguniform, randint, uniform
@@ -29,7 +30,11 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
 from utils import (BEST_PARAMS_PATH, EARTH_RADIUS_M, EXTENDED_AREA, LUXURY_FEATURES, SEED,
-                   northeast_holdout, transductive_reference, twin_groups)
+                   TEXT_CACHE_DIR, TWIN_COLUMNS, embedding_columns, northeast_holdout,
+                   transductive_reference, twin_groups)
+
+# Caché en disco de los predictores de texto ajustados (no se versiona; se puede borrar).
+TEXT_CACHE = Memory(TEXT_CACHE_DIR, verbose=0)
 
 
 def impute():
@@ -391,7 +396,7 @@ class RidgeText(BaseEstimator):
 
 
 def embedding_inputs():
-    from utils import embedding_columns
+    """Columnas de embeddings de título y descripción (utils.add_embeddings)."""
     return embedding_columns("title") + embedding_columns("desc")
 
 
@@ -399,7 +404,9 @@ class EmbeddingNet(BaseEstimator):
     """Fuente de texto de TextPredictors: red con pérdida cuantílica ('alpha') sobre los
     embeddings de título y descripción, una por tipo de inmueble. Cada fila del ajuste
     recibe la predicción de las redes de las particiones que no la vieron; las filas nuevas,
-    el promedio de esas redes."""
+    el promedio de esas redes. Sin coordenadas, el 10 % de parada temprana de QuantileNet se
+    escoge sin juntar gemelos: la parada puede ser algo optimista dentro de cada ajuste
+    interno, sin efecto sobre la validación externa."""
 
     def __init__(self, name="txt_net", alpha=0.70, hidden=(256, 64), dropout=0.2,
                  n_seeds=1):
@@ -453,6 +460,33 @@ class EmbeddingSVD(BaseEstimator):
         return {f"emb_svd_{k}": components[:, k] for k in range(self.n_components)}
 
 
+def text_code_version():
+    """Huella del código que define los predictores de texto y de la semilla: entra en la
+    clave de la caché para que un cambio en esas clases no devuelva resultados viejos."""
+    import hashlib
+    import inspect
+    import utils
+    code = "".join(inspect.getsource(obj) for obj in (
+        RidgeText, EmbeddingNet, EmbeddingSVD, QuantileNet, ByPropertyType, utils.twin_groups))
+    return hashlib.sha256(f"{code}{SEED}{utils.TWIN_DISTANCE_M}".encode()).hexdigest()
+
+
+@TEXT_CACHE.cache
+def fit_text_sources(sources, X, y, code_version):
+    """Ajusta las fuentes de texto con 5 particiones internas (gemelos juntos) y devuelve
+    las fuentes ajustadas y los predictores fuera de muestra de las filas de X. Se guarda en
+    caché: el mismo ajuste (mismas filas, precios, fuentes y versión del código) no se
+    recalcula entre corridas ni entre modelos que solo cambian el boosting."""
+    log_y = np.log(y)
+    folds = list(GroupKFold(n_splits=5, shuffle=True, random_state=SEED).split(
+        X, groups=twin_groups(X)))
+    fitted = [clone(source) for source in sources]
+    features = {}
+    for source in fitted:
+        features.update(source.fit_features(X, log_y, folds))
+    return fitted, features
+
+
 class TextPredictors(RegressorMixin, BaseEstimator):
     """Varios predictores de texto ('sources': RidgeText, EmbeddingNet, EmbeddingSVD) que
     alimentan al modelo. Todas las fuentes comparten las mismas 5 particiones internas del
@@ -470,13 +504,13 @@ class TextPredictors(RegressorMixin, BaseEstimator):
 
     def fit_text(self, X, y):
         """Ajusta las fuentes y devuelve el ajuste con sus predictores fuera de muestra."""
-        log_y = np.log(np.asarray(y, dtype=float))
-        folds = list(GroupKFold(n_splits=5, shuffle=True, random_state=SEED).split(
-            X, groups=twin_groups(X)))
-        self.sources_ = [clone(source) for source in self.sources]
-        features = {}
-        for source in self.sources_:
-            features.update(source.fit_features(X, log_y, folds))
+        # Solo las columnas que leen las fuentes y los gemelos: así la caché sirve aunque
+        # cambien los demás predictores.
+        inputs = ["is_house", "lat", "lon", "text"] + TWIN_COLUMNS + [
+            c for source in self.sources for c in source.inputs()]
+        self.sources_, features = fit_text_sources(
+            tuple(self.sources), X[list(dict.fromkeys(inputs))], np.asarray(y, dtype=float),
+            text_code_version())
         return self._drop_raw(X).assign(**features)
 
     def fit(self, X, y, sample_weight=None):
@@ -892,6 +926,23 @@ def family_pipeline(family):
                           num_leaves=63, min_child_samples=20, subsample=0.8,
                           subsample_freq=1, colsample_bytree=0.6, reg_lambda=1.0,
                           n_jobs=-1, random_state=SEED, verbose=-1),
+        )
+    elif family == "catboost":
+        # Ronda 4, pieza C: la misma receta que el LightGBM con otro algoritmo de boosting
+        # (árboles simétricos). Faltantes nativos; pérdida L1 por defecto.
+        from catboost import CatBoostRegressor
+        steps = make_pipeline(
+            CatBoostRegressor(loss_function="MAE", iterations=2000, learning_rate=0.06,
+                              depth=8, l2_leaf_reg=3.0, thread_count=-1,
+                              random_state=SEED, verbose=0, allow_writing_files=False),
+        )
+    elif family == "xgboost":
+        from xgboost import XGBRegressor
+        steps = make_pipeline(
+            XGBRegressor(objective="reg:absoluteerror", n_estimators=1500,
+                         learning_rate=0.03, max_depth=8, min_child_weight=5,
+                         subsample=0.8, colsample_bytree=0.6, reg_lambda=1.0,
+                         tree_method="hist", n_jobs=-1, random_state=SEED),
         )
     elif family == "neural_net":
         steps = make_pipeline(

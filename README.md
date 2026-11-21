@@ -58,6 +58,12 @@ python 04_train_models.py --specs 17 18   # solo algunos números de SPECS
 python 05_tune_models.py --family cart --features full --n-iter 15 --n-jobs 4
 python 06_ensemble.py --number 31 --how mean --models \
     17_boosting_full_coords_by_type_per_m2 04_elastic_net_full 18_random_forest_full_by_type_per_m2
+# Ronda 4, en este orden:
+python 16_download_lots.py                # lote, pisos y área construida; antes de 02 (internet)
+python 13_text_embeddings.py              # embeddings del texto; antes de las filas 86-98
+python 14_tune_text_ridge.py              # ridge de texto sintonizado; antes de la fila 89
+python 15_optuna_search.py --spec 94 --sampler tpe cmaes --n-trials 60   # antes de la 98
+python 15_optuna_search.py --spec 94 --confirm optuna_tpe
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -78,6 +84,9 @@ Dos archivos pesados no se versionan y se regeneran con los scripts:
 - `stores/processed/text_embeddings.npz`, con los embeddings de título y descripción. Lo
   escribe `13_text_embeddings.py` (unos 20 minutos en CPU; descarga
   `intfloat/multilingual-e5-small` de Hugging Face la primera vez).
+- `stores/processed/text_cache/`, la caché de los predictores de texto ya ajustados
+  (`models.fit_text_sources`). Su clave incluye las filas, los precios, las fuentes y una
+  huella del código de esas clases; se puede borrar sin perder nada.
 
 ## Datos y predictores
 
@@ -229,6 +238,18 @@ Cifras en millones de pesos.
 | `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10` | 35 | – | 131.5 | 142.4 | 156.6 | 154.8 | -55.4 | 50% |
 | `84_ensemble_w90_10_2` | – | – | 132.2 | 141.6 | 155.3 | 153.6 | -54.5 | 50% |
 | `85_ensemble_w80_20_2` | – | – | 133.7 | 141.3 | 154.4 | 152.7 | -53.6 | 51% |
+| `86_boosting_core_coords_by_type_level_q70_net` | 801 | – | 136.8 | – | 160.6 | 158.8 | -59.3 | 49% |
+| `87_boosting_core_coords_by_type_level_q70_ridge_net` | 801 | – | 130.5 | – | 158.0 | 156.2 | -56.7 | 50% |
+| `88_boosting_core_coords_by_type_level_q70_ridge_esvd20` | 801 | – | 136.5 | – | 158.5 | 156.7 | -60.8 | 48% |
+| `89_boosting_core_coords_by_type_level_q70_ridge_tuned` | 33 | – | 134.5 | – | 156.7 | 154.9 | -57.1 | 49% |
+| `90_boosting_core_coords_by_type_level_q70_ridge_type` | 33 | – | 133.4 | – | 156.8 | 155.1 | -54.7 | 50% |
+| `91_boosting_core_coords_by_type_level_q70_ridge_title_desc` | 35 | – | 133.7 | – | 158.2 | 156.4 | -55.9 | 50% |
+| `92_boosting_core_coords_by_type_level_q70_ridge_char` | 33 | – | 133.5 | – | 157.3 | 155.5 | -56.9 | 49% |
+| `93_boosting_core_coords_by_type_level_q70_ridge_type_net` | 801 | – | 131.3 | – | 156.6 | 154.8 | -54.4 | 50% |
+| `94_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10` | 803 | – | 129.6 | – | 156.2 | 154.5 | -53.5 | 51% |
+| `95_catboost_ext_core_coords_by_type_level_q70_ridge_type_net` | 803 | – | 132.3 | – | 158.9 | 157.2 | -67.4 | 48% |
+| `96_xgboost_ext_core_coords_by_type_level_q70_ridge_type_net` | 803 | – | 133.0 | – | 157.1 | 155.4 | -52.4 | 51% |
+| `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | 803 | – | 128.6 | – | 154.6 | 152.9 | -53.8 | 51% |
 
 "MAE ponderado" es el holdout nororiental ponderado como el test (ronda 3a): el error de los
 inmuebles con anuncios del mismo edificio pesa lo que pesan en el test (24 %). La columna
@@ -331,7 +352,11 @@ Lectura:
   - (vii) las filas 46, 47, 48 y 52 usan la primera versión de la corrección por
     truncamiento, que manda las predicciones cercanas al piso o al techo a los bordes de su
     búsqueda (110 M y 4.481 M). La 62 usa la versión corregida, que solo corrige el techo:
-    164.7 frente a 168.5 sin corrección (45).
+    164.7 frente a 168.5 sin corrección (45);
+  - (viii) ronda 4: la fila 98 y `views/optuna_*.csv` son optimistas frente a la 94,
+    porque 15 busca, confirma y compara cuantiles con las mismas particiones (holdout
+    nororiental y validación espacial). La espacial de la 89 también lo es un poco: 14
+    escoge el ridge con las filas de ajuste del holdout, que son casi todo train.
 
 ### Calibración de nivel (no es un modelo)
 

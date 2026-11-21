@@ -37,7 +37,9 @@ VIEWS_DIR = ROOT / "views"
 OSM_POIS_PATH = PROCESSED_DIR / "osm_pois.csv"
 BEST_PARAMS_PATH = PROCESSED_DIR / "best_params.json"
 BOGOTA_BLOCKS_PATH = PROCESSED_DIR / "bogota_blocks.csv"
+BOGOTA_LOTS_PATH = PROCESSED_DIR / "bogota_lots.csv"
 EMBEDDINGS_PATH = PROCESSED_DIR / "text_embeddings.npz"
+TEXT_CACHE_DIR = PROCESSED_DIR / "text_cache"
 EMBEDDING_DIM = 384   # dimensión de multilingual-e5-small (13_text_embeddings.py)
 
 ID_COL = "property_id"
@@ -77,6 +79,8 @@ LANDMARK_FEATURES = [
 CORRIDOR_FEATURES = ["dist_carrera_7_m", "dist_cerros_m"]
 # Datos abiertos de Bogotá por manzana (11_download_bogota.py): estrato y valor del terreno.
 EXTERNAL_FEATURES = ["ext_stratum", "ext_land_value_m2"]
+# Catastro por lote (16_download_lots.py): área del lote, pisos y área construida del predio.
+LOT_FEATURES = ["ext_lot_area_m2", "ext_floors", "ext_built_area_m2"]
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -162,6 +166,9 @@ def feature_sets(columns):
         # 'ext_core' es 'core' con el estrato y el valor del terreno de la manzana.
         "ext_core_coords": ([c for c in full if c not in osm] + EXTERNAL_FEATURES
                             + COORD_FEATURES),
+        # 'lot_core_coords' es 'ext_core_coords' con el lote y la construcción del predio.
+        "lot_core_coords": ([c for c in full if c not in osm] + EXTERNAL_FEATURES
+                            + [c for c in LOT_FEATURES if c in columns] + COORD_FEATURES),
         # 'lux_core' es 'core' con el área ampliada y las señales de lujo.
         "lux_core_coords": ([EXTENDED_AREA.get(c, c) for c in full if c not in osm]
                             + LUXURY_FEATURES + COORD_FEATURES),
