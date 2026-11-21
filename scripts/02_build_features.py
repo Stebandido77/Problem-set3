@@ -1,7 +1,8 @@
 """Construye la base de modelación: limpieza, predictores de texto y predictores espaciales.
 
 Entradas: stores/raw/{train,test}.csv y, si existen, stores/processed/osm_pois.csv y
-stores/processed/bogota_blocks.csv (estrato y valor del terreno, de 11_download_bogota.py).
+stores/processed/bogota_blocks.csv (estrato y valor del terreno, de 11_download_bogota.py) y
+stores/processed/bogota_lots.csv (lote, pisos y área construida, de 16_download_lots.py).
 Salidas:  stores/processed/{train,test}_features.csv
 
 Uso: python scripts/02_build_features.py
@@ -13,8 +14,9 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import BallTree
 
-from utils import (BOGOTA_BLOCKS_PATH, EARTH_RADIUS_M, ID_COL, OSM_POIS_PATH, PROCESSED_DIR,
-                   TARGET, distance_to_nearest_m, haversine_m, load_raw, test_similarity)
+from utils import (BOGOTA_BLOCKS_PATH, BOGOTA_LOTS_PATH, EARTH_RADIUS_M, ID_COL, LOT_FEATURES,
+                   OSM_POIS_PATH, PROCESSED_DIR, TARGET, distance_to_nearest_m, haversine_m,
+                   load_raw, test_similarity)
 
 COUNT_RADIUS_M = 500
 # Categorías densas: además de la distancia, cuántas hay a 500 m (densidad de servicios).
@@ -392,6 +394,17 @@ def add_bogota_blocks(built):
         feats["ext_land_value_m2"] = land_value.where(land_value > 0)
 
 
+def add_bogota_lots(built, max_distance_m=40):
+    """Área del lote, número de pisos y área construida del predio (16_download_lots.py).
+    Si el centroide del lote asignado queda a más de 'max_distance_m', el inmueble no cae en
+    ningún lote cercano y los tres quedan como faltantes."""
+    lots = pd.read_csv(BOGOTA_LOTS_PATH).set_index(ID_COL)
+    for feats in built.values():
+        near = feats[ID_COL].map(lots["ext_lot_dist_m"]) <= max_distance_m
+        for column in LOT_FEATURES:
+            feats[column] = feats[ID_COL].map(lots[column]).where(near)
+
+
 def main():
     train, test = load_raw()
     pois = pd.read_csv(OSM_POIS_PATH) if OSM_POIS_PATH.exists() else None
@@ -413,6 +426,8 @@ def main():
     add_title_names(built, {"train": train, "test": test})
     if BOGOTA_BLOCKS_PATH.exists():
         add_bogota_blocks(built)
+    if BOGOTA_LOTS_PATH.exists():
+        add_bogota_lots(built)
     # Parecido al test (no es predictor): sirve para ponderar el entrenamiento.
     built["train"]["test_similarity"] = test_similarity(built["train"], built["test"])
     for name, feats in built.items():
