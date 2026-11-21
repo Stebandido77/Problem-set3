@@ -469,6 +469,120 @@ hiperparámetros de la 103 con 5 semillas (153,26 ± 0,27 frente a 152,92 ± 0,1
 corrección de nivel con residuos fuera de muestra (108 a 110) no cambia las lineales ni el
 CART. La correlación entre la 83 y la 114 en test es 0,975.
 
+### Ronda 7: ideas sobre la receta de la 83 y familias que faltan en Kaggle
+
+Cifras en millones, de `views/cv_results.csv` y `views/round7_summary.csv`. Media, mediana
+y p95 son del envío en test. Las filas de una semilla se comparan con la 82 (la 83 con una
+semilla).
+
+| Fila | Cambio | Ponderado | Espacial | Media test | Mediana | p95 |
+|---|---|---:|---:|---:|---:|---:|
+| 83 | boosting de referencia (10 semillas) | 154,8 | 131,5 | 882 | 860 | 1.457 |
+| 82 | la 83 con una semilla | 155,4 | 132,6 | 883 | 864 | 1.443 |
+| 120 | A1: área y baños del mismo punto | 155,9 | 129,2 | 875 | 849 | 1.447 |
+| 121 | A4: sin lat ni lon | 156,4 | 130,7 | 880 | 858 | 1.455 |
+| 122 | A4: lat y lon a 3 decimales | 155,8 | 132,6 | 880 | 862 | 1.447 |
+| 123 | A1 + A4 sin coordenadas | 156,1 | 127,7 | 876 | 853 | 1.445 |
+| 124 | A1, 10 semillas | 155,4 | 128,4 | 879 | 859 | 1.446 |
+| 125 | A1 + A4, 10 semillas | 155,7 | 127,1 | 879 | 857 | 1.443 |
+| 126 | 125 + A2, mediana de los gemelos de train | 155,5 | 127,1 | 877 | 854 | 1.446 |
+| 127 | 125 + A2, mezcla 50/50 | 155,5 | 127,0 | 878 | 854 | 1.443 |
+| 128 | 125 + A3, promedio entre gemelos del test | 156,0 | 127,5 | 879 | 856 | 1.446 |
+| 129 | 125 + A2 mezcla + A3 | 155,7 | 127,2 | 878 | 856 | 1.446 |
+
+- **A1** (`02_build_features.add_same_point_structure`, conjunto `pt_core_coords`): para el
+  inmueble sin área o sin baños, mediana de los anuncios de train y test en el mismo punto
+  (coordenadas a 5 decimales), con igual número de alcobas y tipo. No usa precios. Recupera
+  el área del 45,3 % de los inmuebles del test sin área (1.681 de 3.710) y del 34,1 % en
+  train; los baños, del 24,7 % en test. En esas filas el error espacial baja de 145,8 a
+  132,9 (`views/round7_subsets.csv`).
+- **A2, regla de vecino más cercano sobre anuncios repetidos** (`20_twin_rules.py`): si un
+  anuncio tiene exactamente la misma descripción (más de 30 caracteres) que anuncios de
+  train, su predicción pasa a la mediana del precio de esos gemelos (126) o al promedio
+  50/50 con el modelo (127). En el test toca 200 anuncios. En la validación aleatoria simple
+  (gemelos sin agrupar) acierta mucho: en sus 11.098 filas con gemelo, de 60,3 a 15,2. Pero
+  son casi siempre el mismo inmueble en el mismo sitio. Donde el gemelo está en otra zona,
+  como en el test, el reemplazo no ayuda: en la espacial, sus 582 filas pasan de 159,9 a
+  160,6. La mezcla sí, a 148,4. En el holdout nororiental (152 filas), de 179,2 a 174,1 con
+  la mediana y a 172,4 con la mezcla.
+- **A3** (promediar las predicciones de los gemelos del test, 2.993 anuncios): empeora en
+  todos los esquemas, por ejemplo de 164,7 a 166,0 en las filas afectadas del nororiental.
+- **A4:** cerca de un anuncio de ajuste (a menos de 30 m) el error sin coordenadas es igual
+  (nororiental 124,1 frente a 124,7); lejos tampoco cambia. Lo que gana sin coordenadas sale
+  en la espacial, en bloques sin vecinos.
+
+**Pieza B: lineales y redes sin coordenadas crudas.**
+
+| Fila | Modelo | Ponderado | Espacial | Media test | Mín. | Máx. | En 300 M | En 1.650 M |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 108 | lineal con splines de lat y lon (Kaggle 180,5) | 166,0 | 164,1 | 860 | 300 | 1.650 | 32 | 62 |
+| 130 | lineal sin lat ni lon | 165,5 | 156,3 | 816 | 300 | 1.650 | 80 | 36 |
+| 104 | elastic net con splines | 165,8 | 158,5 | 847 | 300 | 1.650 | 57 | 59 |
+| 131 | elastic net sin lat ni lon | 165,5 | 156,8 | 817 | 300 | 1.650 | 82 | 34 |
+| 78 | red cuantílica por tipo (ronda 3) | 155,3 | 164,0 | 838 | 330 | 2.003 | 0 | 50* |
+| 148 | red con estrato, valor del terreno y ridge, sin lat ni lon | 148,2 | 137,6 | 875 | 333 | 2.002 | 0 | 167* |
+
+\* La red no tiene tope: es el número de predicciones de 1.650 M o más.
+
+Sin coordenadas, la lineal gana 7,8 M en la espacial, pero baja su media en test a 816 M y
+pega 80 predicciones al piso de 300 M. La red 148 es la mejor fila de la ronda en el
+ponderado: 6,6 M mejor que la 83. En la espacial queda 6,1 M peor que la 83, pero 26 M mejor
+que la 78. Las redes ya ganaban en el holdout y perdían en la espacial (78, y el patrón del
+54 en Kaggle), así que solo Kaggle dirá si el ponderado acierta con ella.
+
+**Pieza C: balanceo hacia el lujo** (filas 132 a 147; `views/round7_deciles.csv`). Cuatro
+variantes sobre la 82, cada una con cuantil 0,55 a 0,70. Se escoge el cuantil cuya media en
+test queda más cerca de 880 M (la de la 83): es una calibración de nivel contra el test que
+no usa sus precios.
+
+| Fila | Variante | Ponderado | Espacial | Media test | MAE 30 % más caro | Sobrepredicho (30 % caro) | Spearman (30 % caro) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 82 | sin balanceo, q0,70 | 155,4 | 132,6 | 883 | 307,7 | 6,2 % | 0,248 |
+| 134 | pesos 1 a 2, q0,65 | 156,8 | 132,7 | 872 | 315,5 | 5,6 % | 0,233 |
+| 138 | pesos 1 a 4, q0,65 | 159,5 | 138,1 | 881 | 312,5 | 5,4 % | 0,232 |
+| 141 | duplicado, q0,60 | 156,1 | 127,3 | 872 | 316,9 | 6,0 % | 0,236 |
+| 144 | triplicado, q0,55 | 156,9 | 125,0 | 874 | 320,2 | 5,7 % | 0,210 |
+
+El balanceo no mejora el orden de los caros: empeora su MAE y su correlación de rangos. El
+sobremuestreo baja la espacial, porque reduce la sobrepredicción de los inmuebles baratos
+(decil 1: sesgo de +101 a +79). Es nivel, no orden. En la 134 hubo empate a 8 M entre q0,65
+(872) y q0,70 (888); se escogió q0,65 por su menor ponderado.
+
+**Pieza D: la red frente al ridge en el texto** (`22_text_nets.py`, `views/text_nets.csv`).
+Cada fuente se evalúa sola, fuera de muestra, como predictor del precio.
+
+| Fuente | Ponderado | Espacial |
+|---|---:|---:|
+| ridge sobre TF-IDF (el de la 83) | 212,8 | 166,1 |
+| red de la ronda 4 sobre embeddings e5 (cuantil 0,70) | 206,8 | 204,5 |
+| red densa sobre el mismo TF-IDF | 216,1 | 171,0 |
+| red sobre la SVD de 300 componentes del TF-IDF | 225,7 | 175,3 |
+| la red TF-IDF sintonizada con NSGA-II (60 evaluaciones) | 213,9 | 165,5† |
+| embeddings tipo fastText aprendidos desde cero | no terminó en 30 min | |
+
+† Algo optimista: el genético se sintonizó con filas que la espacial usa para validar.
+
+La red de la ronda 4 (`EmbeddingNet`: capas de 256 y 64, dropout 0,2, tasa 3e-3, sin
+sintonizar) ve otra representación (embeddings de frases). El genético prefiere la red más
+simple: embeddings de 32, sin capas ocultas, dropout 0,23 y regularización 2e-4. Dentro del
+boosting, el ridge con la red sintonizada (149, solo holdout nororiental) da 155,6, frente a
+155,4 de la 82. Con el mismo TF-IDF la red empata con el ridge, aunque se le dé más
+capacidad. La diferencia entre la red de la ronda 4 y el ridge viene de la representación:
+con embeddings la red gana en el nororiente y viaja mucho peor. torch-directml no se instaló:
+bajaba torch de 2.15 a 2.4.1 en el entorno.
+
+**Pieza E.** Ningún boosting de A o C supera a la 83 en los dos criterios, así que no se
+repitió la mezcla con el bosque 114. Validación aleatoria con gemelos agregada: 83 111,0;
+125 110,7; 78 140,2; 120 a 124, 130, 131, 134, 138, 141, 144 y 148 en
+`views/round7_summary.csv`. Siguen sin ella las filas 72 a 98 que no son candidatas a envío
+y las variantes de la C sin escoger. Los envíos vigentes se revisaron: todos tienen los ids y
+el orden de la plantilla, sin faltantes y con precios positivos; no hubo que mover nada a
+`obsoletos/`.
+
+**Conclusión:** nada supera a la 83 por más de 2 M en los dos criterios. La 127 gana 4,5 M en
+la espacial y empata en el ponderado (+0,7). La red 148 gana 6,6 M en el ponderado y pierde
+6,1 M en la espacial.
+
 ### Calibración de nivel (no es un modelo)
 
 Multiplicar un envío por un factor fijo no es un modelo: es calibrar con el leaderboard.
