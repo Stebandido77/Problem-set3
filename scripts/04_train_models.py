@@ -27,8 +27,9 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from models import (FAMILIES, ByPropertyType, EmbeddingNet, EmbeddingSVD, FocusFineTune,
-                    ImputedArea, NameLevel, NeighborhoodLevel, PriceWeighted, QuantileNet,
+from models import (FAMILIES, ByPropertyType, DropColumns, EmbeddingNet, EmbeddingSVD,
+                    FocusFineTune, ImputedArea, NameLevel, NeighborhoodLevel, PriceWeighted,
+                    QuantileNet,
                     ResidualBoosting, RidgeText, SameBuilding, SeedAverage, SyntheticTail,
                     TextFeatures, TextPredictors, TruncationCorrection, build_model,
                     fit_model, load_best_params, northeast_building_groups)
@@ -78,7 +79,9 @@ class Spec:
     text_sources: tuple = ()     # fuentes de TEXT_SOURCES que alimentan al modelo
                                  # (TextPredictors, ronda 4)
     tune_key: str = ""           # clave de best_params.json si no es '<familia>_<conjunto>'
-    recipe: str = ""             # 'q70': versión cuantílica de la ronda 5 (QUANTILE_RECIPES)
+    recipe: str = ""             # 'q70': versión cuantílica de la ronda 5 (QUANTILE_RECIPES);
+                                 # otras: variantes de la ronda 6 (ROUND6_RECIPES)
+    drop_coords: bool = False    # el modelo no ve lat ni lon (sí el texto, para los gemelos)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -327,6 +330,76 @@ ROUND_5 = [
     Spec("cart", "ext_core_coords", "by_type_level_q70_ridge_tuned", tuned=True,
          tune_key="cart_q70", **R5),
 ]
+
+
+def moved_params(key, moves):
+    """Hiperparámetros de best_params.json[key] con cada ruta 'vieja' cambiada por la
+    'nueva' de 'moves': para usar los valores sintonizados en la ronda 5 cuando la receta
+    envuelve al pipeline."""
+    params = []
+    for path, value in load_best_params().get(key, {}).items():
+        for old, new in moves:
+            path = path.replace(old, new)
+        params.append((path, value))
+    return tuple(params)
+
+
+# Ronda 6: acercar el bosque cuantílico (103) al boosting (83). Criterio: holdout ponderado
+# y validación espacial. Todas con los hiperparámetros de la 103 salvo que se diga otra cosa.
+ROUND_6_START = 106
+# Hiperparámetros del mejor bosque tras el paso 2: los de la 103, porque con 5 semillas el
+# genético no los supera (153,26 frente a 152,92 M, views/genetic_confirm.csv).
+BEST_FOREST_KEY = "random_forest_q70"
+FOREST_STEP = "regressor__randomforestquantileregressor__"
+EXTRA_STEP = "regressor__extratreesquantileregressor__"
+RESIDUAL_STEP = "regressor__forest__randomforestquantileregressor__"
+# ExtraTrees no remuestrea filas por defecto: si hay fracción de filas, hace falta bootstrap.
+EXTRA_BOOTSTRAP = (((EXTRA_STEP + "bootstrap", True),)
+                   if FOREST_STEP + "max_samples" in load_best_params().get(BEST_FOREST_KEY, {})
+                   else ())
+RF_TUNED = dict(tuned=True, tune_key="random_forest_q70")
+R6 = dict(target="level", by_type=True, recipe="q70")
+ROUND_6 = [
+    # Paso 1. La red sobre embeddings de la ronda 4 (fuera de muestra) en lugar del ridge
+    # y junto a él.
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_net_tuned",
+         text_sources=("net",), **RF_TUNED, **R6),
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_net_tuned",
+         text_sources=("ridge", "net"), **RF_TUNED, **R6),
+    # De paso: la corrección de nivel de las lineales y del CART con residuos fuera de
+    # muestra (las 101, 104 y 105 con otra corrección).
+    Spec("linear", "ext_core_coords", "splines_by_type_level_q70_ridge_oof",
+         target="level", by_type=True, text_sources=("ridge",), recipe="q70_oof_linear"),
+    Spec("elastic_net", "ext_core_coords", "splines_by_type_level_q70_ridge_tuned_oof",
+         target="level", by_type=True, text_sources=("ridge",), recipe="q70_oof_elastic_net",
+         params=moved_params("elastic_net_q70", [
+             ("regressor__quantileshift__regressor__", "regressor__regressor__elasticnet__"),
+             ("regressor__splinedesign__", "regressor__regressor__splinedesign__")])),
+    Spec("cart", "ext_core_coords", "by_type_level_q70_ridge_tuned_oof",
+         target="level", by_type=True, text_sources=("ridge",), recipe="q70_oof_cart",
+         params=moved_params("cart_q70", [("regressor__leafquantiletree__",
+                                            "regressor__regressor__leafquantiletree__")])),
+    # Paso 2. La 107 (ridge y red) con los hiperparámetros del genético (19_genetic_search.py).
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_net_ga",
+         text_sources=("ridge", "net"), tuned=True, tune_key="random_forest_ga", **R6),
+    # Paso 3, uno a la vez contra el mejor bosque hasta aquí (BEST_FOREST_KEY): a) bosque
+    # sobre los residuos de un lineal, b) ExtraTrees cuantílico, c) sin lat ni lon.
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_net_resid",
+         text_sources=("ridge", "net"), target="level", by_type=True, recipe="q70_resid",
+         params=moved_params(BEST_FOREST_KEY, [(FOREST_STEP, RESIDUAL_STEP)])),
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_net_extra",
+         text_sources=("ridge", "net"), target="level", by_type=True, recipe="q70_et",
+         params=moved_params(BEST_FOREST_KEY, [(FOREST_STEP, EXTRA_STEP)]) + EXTRA_BOOTSTRAP),
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_net_nocoords",
+         text_sources=("ridge", "net"), drop_coords=True, tuned=True,
+         tune_key=BEST_FOREST_KEY, **R6),
+    # Combinación de lo que ayudó en algún criterio sin dañar el otro más allá del ruido:
+    # ExtraTrees (113, −2,5 en el ponderado) y sin lat ni lon (114, −1,9 en la espacial).
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_net_extra_nocoords",
+         text_sources=("ridge", "net"), target="level", by_type=True, recipe="q70_et",
+         drop_coords=True,
+         params=moved_params(BEST_FOREST_KEY, [(FOREST_STEP, EXTRA_STEP)]) + EXTRA_BOOTSTRAP),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -336,7 +409,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_3B, start=ROUND_3B_START)),
                   **dict(enumerate(ROUND_3C, start=ROUND_3C_START)),
                   **dict(enumerate(ROUND_4, start=ROUND_4_START)),
-                  **dict(enumerate(ROUND_5, start=ROUND_5_START))}
+                  **dict(enumerate(ROUND_5, start=ROUND_5_START)),
+                  **dict(enumerate(ROUND_6, start=ROUND_6_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -397,6 +471,8 @@ def build_spec_model(spec, params):
         model = TextFeatures(model, mode=mode, n_components=n_components)
     if spec.names:
         model = NameLevel(model)
+    if spec.drop_coords:
+        model = DropColumns(model, tuple(COORD_FEATURES))
     if spec.text_sources:
         model = TextPredictors(model, [TEXT_SOURCES[key] for key in spec.text_sources])
     return model
@@ -406,7 +482,7 @@ def spec_features(spec, sets):
     """Predictores de una especificación; los vecinos necesitan lat/lon para buscarse y los
     envoltorios de texto, el texto crudo o el nombre del título."""
     features = sets[spec.features]
-    if spec.neighbors:
+    if spec.neighbors or spec.drop_coords:
         features = features + [c for c in COORD_FEATURES if c not in features]
     if spec.text:
         features = features + ["text"]

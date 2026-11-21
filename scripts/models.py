@@ -504,13 +504,18 @@ class TextPredictors(RegressorMixin, BaseEstimator):
 
     def fit_text(self, X, y):
         """Ajusta las fuentes y devuelve el ajuste con sus predictores fuera de muestra."""
-        # Solo las columnas que leen las fuentes y los gemelos: así la caché sirve aunque
-        # cambien los demás predictores.
-        inputs = ["is_house", "lat", "lon", "text"] + TWIN_COLUMNS + [
-            c for source in self.sources for c in source.inputs()]
-        self.sources_, features = fit_text_sources(
-            tuple(self.sources), X[list(dict.fromkeys(inputs))], np.asarray(y, dtype=float),
-            text_code_version())
+        # Cada fuente se ajusta y se guarda en caché por separado, solo con las columnas que
+        # lee y las de los gemelos: así la caché sirve aunque cambien los demás predictores
+        # o la combinación de fuentes (ronda 6). Las particiones internas no dependen de la
+        # fuente (salen de los gemelos), así que el resultado es el mismo que juntas.
+        self.sources_, features = [], {}
+        for source in self.sources:
+            inputs = ["is_house", "lat", "lon", "text"] + TWIN_COLUMNS + source.inputs()
+            fitted, source_features = fit_text_sources(
+                (source,), X[list(dict.fromkeys(inputs))], np.asarray(y, dtype=float),
+                text_code_version())
+            self.sources_ += fitted
+            features.update(source_features)
         return self._drop_raw(X).assign(**features)
 
     def fit(self, X, y, sample_weight=None):
@@ -890,7 +895,8 @@ def build_model(family, params=None, target="log", by_type=False, surface_col="s
         model = PricePerSquareMeter(build_model(family, params), build_model(family, params),
                                     surface_col)
     else:
-        steps = QUANTILE_RECIPES[family]() if recipe == "q70" else family_pipeline(family)
+        steps = (QUANTILE_RECIPES[family]() if recipe == "q70"
+                 else ROUND6_RECIPES[recipe]() if recipe else family_pipeline(family))
         model = log_target(steps) if target == "log" else level_target(steps)
         model.set_params(**params)
     return ByPropertyType(model) if by_type else model
@@ -1027,19 +1033,35 @@ class QuantileShift(RegressorMixin, BaseEstimator):
     El corrimiento se calcula en cada ajuste (dentro de cada partición y de cada tipo), nunca
     con validación ni test. Los residuos son de la misma muestra: con modelos lineales casi
     no difieren de los de fuera de muestra. Como un modelo lineal en niveles puede
-    extrapolar a precios negativos, la predicción se recorta al rango de precios del ajuste."""
+    extrapolar a precios negativos, la predicción se recorta al rango de precios del ajuste.
 
-    def __init__(self, regressor, quantile=RECIPE_QUANTILE, scale=1e6):
+    Con oof=True (ronda 6) los residuos son fuera de muestra: 5 particiones internas del
+    ajuste con los gemelos juntos (X debe ser un DataFrame con lat, lon y TWIN_COLUMNS).
+    Así el corrimiento no se achica por el sobreajuste del modelo en su propia muestra.
+    Ojo: a esta altura TextPredictors ya quitó el texto, así que los gemelos se agrupan solo
+    por ubicación y estructura (no los reanuncios con otra ubicación)."""
+
+    def __init__(self, regressor, quantile=RECIPE_QUANTILE, scale=1e6, oof=False):
         self.regressor = regressor
         self.quantile = quantile
         self.scale = scale
+        self.oof = oof
 
     def fit(self, X, y):
         y = np.asarray(y, dtype=float) / self.scale
         self.regressor_ = clone(self.regressor).fit(X, y)
-        self.shift_ = float(np.quantile(y - self.regressor_.predict(X), self.quantile))
+        fitted = self._out_of_fold(X, y) if self.oof else self.regressor_.predict(X)
+        self.shift_ = float(np.quantile(y - fitted, self.quantile))
         self.range_ = (y.min(), y.max())
         return self
+
+    def _out_of_fold(self, X, y):
+        out = np.zeros(len(y))
+        folds = GroupKFold(n_splits=5, shuffle=True, random_state=SEED)
+        for fit_idx, pred_idx in folds.split(X, groups=twin_groups(X)):
+            model = clone(self.regressor).fit(X.iloc[fit_idx], y[fit_idx])
+            out[pred_idx] = model.predict(X.iloc[pred_idx])
+        return out
 
     def predict(self, X):
         return np.clip(self.regressor_.predict(X) + self.shift_, *self.range_) * self.scale
@@ -1079,6 +1101,80 @@ def quantile_forest():
         RandomForestQuantileRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.4,
                                       default_quantiles=RECIPE_QUANTILE, n_jobs=-1,
                                       random_state=SEED))
+
+
+def quantile_extra_trees():
+    """ExtraTrees cuantílico: cortes al azar en lugar del mejor corte, percentil 70 de los
+    precios de entrenamiento de las hojas (ronda 6, paso 3b)."""
+    from quantile_forest import ExtraTreesQuantileRegressor
+    return make_pipeline(
+        impute(),
+        ExtraTreesQuantileRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.4,
+                                    default_quantiles=RECIPE_QUANTILE, n_jobs=-1,
+                                    random_state=SEED))
+
+
+# Predictores del modelo lineal de ResidualForest: área, texto, estrato, valor del terreno
+# y un gradiente lineal de ubicación.
+RESIDUAL_LINEAR_COLUMNS = ["surface", "txt_ridge", "txt_net", "ext_stratum",
+                           "ext_land_value_m2", "lat", "lon"]
+
+
+class ResidualForest(RegressorMixin, BaseEstimator):
+    """Mínimos cuadrados del precio sobre RESIDUAL_LINEAR_COLUMNS (las que haya) y un bosque
+    cuantílico en 0,70 sobre sus residuos con todos los predictores (ronda 6, paso 3a). El
+    lineal se ajusta con las filas de ajuste de cada partición y de cada tipo; el bosque
+    aprende de sus residuos en la misma muestra."""
+
+    def __init__(self, forest):
+        self.forest = forest
+
+    def fit(self, X, y):
+        self.columns_ = [c for c in RESIDUAL_LINEAR_COLUMNS if c in X.columns]
+        self.linear_ = make_pipeline(impute(), LinearRegression()).fit(X[self.columns_], y)
+        residual = np.asarray(y, dtype=float) - self.linear_.predict(X[self.columns_])
+        self.forest_ = clone(self.forest).fit(X, residual)
+        return self
+
+    def predict(self, X):
+        return self.linear_.predict(X[self.columns_]) + self.forest_.predict(X)
+
+
+class DropColumns(RegressorMixin, BaseEstimator):
+    """Quita columnas antes del modelo. Sirve para que el texto fuera de muestra siga
+    agrupando gemelos por ubicación aunque el modelo no use lat ni lon (ronda 6, paso 3c)."""
+
+    def __init__(self, model, columns=("lat", "lon")):
+        self.model = model
+        self.columns = columns
+
+    def fit(self, X, y, sample_weight=None):
+        self.model_ = fit_model(clone(self.model), X.drop(columns=list(self.columns)), y,
+                                sample_weight)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X.drop(columns=list(self.columns)))
+
+
+# Ronda 6: variantes con nombre propio (Spec.recipe).
+ROUND6_RECIPES = {
+    "q70_et": quantile_extra_trees,
+    "q70_resid": lambda: ResidualForest(quantile_forest()),
+    # Corrección de nivel con residuos fuera de muestra. El nivel se fija sobre el modelo
+    # completo (con el DataFrame), por eso el corrimiento envuelve al pipeline.
+    "q70_oof_linear": lambda: QuantileShift(
+        make_pipeline(SplineDesign(), LinearRegression()), oof=True),
+    "q70_oof_elastic_net": lambda: QuantileShift(make_pipeline(SplineDesign(), ElasticNet(
+        alpha=0.01, l1_ratio=0.5, max_iter=2000, tol=1e-3, selection="random",
+        random_state=SEED)), oof=True),
+    # El árbol ya predice el percentil 70 de cada hoja; el corrimiento fuera de muestra
+    # corrige lo que le falte al percentil de la misma muestra. Va en pesos (scale=1): el
+    # árbol ya pasa el precio a millones, y con los dos cambios de escala la poda
+    # sintonizada (en millones al cuadrado) dejaba el árbol casi sin cortes.
+    "q70_oof_cart": lambda: QuantileShift(make_pipeline(impute(), LeafQuantileTree()),
+                                          scale=1.0, oof=True),
+}
 
 
 QUANTILE_RECIPES = {
