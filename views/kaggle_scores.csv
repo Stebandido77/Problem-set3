@@ -10,3 +10,4 @@ model,public_mae,date
 65_boosting_core_coords_by_type_level_q70,160949232,2026-11-19
 83_boosting_ext_core_coords_by_type_level_q70_ridge_s10_v2,152057602,2026-11-20
 75_boosting_core_coords_by_type_level_q70_ridge_v2,153085091,2026-11-20
+98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe,153438881,2026-11-21
