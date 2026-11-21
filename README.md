@@ -579,7 +579,22 @@ y las variantes de la C sin escoger. Los envíos vigentes se revisaron: todos ti
 el orden de la plantilla, sin faltantes y con precios positivos; no hubo que mover nada a
 `obsoletos/`.
 
-**Conclusión:** nada supera a la 83 por más de 2 M en los dos criterios. La 127 gana 4,5 M en
+**Mezclas de boosting y red** (`06_ensemble.py`, pesos fijos boosting/red):
+
+| Fila | Mezcla | Correlación en test | Ponderado | Espacial | Media test |
+|---|---|---:|---:|---:|---:|
+| 83 | boosting solo | | 154,8 | 131,5 | 882 |
+| 148 | red sola | | 148,2 | 137,6 | 875 |
+| 150 | 83 / 148, 70/30 | 0,969 | 151,5 | 131,1 | 879 |
+| 151 | 83 / 148, 50/50 | 0,969 | 149,9 | 132,0 | 878 |
+| 152 | 127 / 148, 70/30 | 0,962 | 151,7 | 127,6 | 877 |
+| 153 | 127 / 148, 50/50 | 0,962 | 150,0 | 129,4 | 876 |
+
+La 152 es la primera fila que supera a la 83 por más de 2 M en los dos criterios (−3,1 y
+−3,9). La 153 también, por poco en la espacial (−2,1). Las dos dependen de que el ponderado
+acierte con la red 148, que aún no tiene puntaje público.
+
+**Conclusión antes de las mezclas:** nada supera a la 83 por más de 2 M en los dos criterios. La 127 gana 4,5 M en
 la espacial y empata en el ponderado (+0,7). La red 148 gana 6,6 M en el ponderado y pierde
 6,1 M en la espacial.
 
