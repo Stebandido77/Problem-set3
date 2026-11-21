@@ -28,7 +28,13 @@ destruye capital?
 │   ├── 09_level_calibration.py  versiones escaladas de un envío (x1,10, x1,20...)
 │   ├── 10_same_building.py    error con y sin anuncios del mismo edificio (ronda 3a)
 │   ├── 11_download_bogota.py  estrato y valor catastral del terreno por manzana (datos abiertos)
-│   └── 12_text_report.py      términos y componentes del texto que más pesan
+│   ├── 12_text_report.py      términos y componentes del texto que más pesan
+│   ├── 13_text_embeddings.py  embeddings de frases del título y la descripción (ronda 4)
+│   ├── 14_tune_text_ridge.py  alfa, min_df y n-gramas del ridge de texto (ronda 4)
+│   ├── 15_optuna_search.py    Optuna TPE contra CMA-ES para el LightGBM (ronda 4)
+│   ├── 16_download_lots.py    lote, pisos y área construida del catastro (ronda 4)
+│   ├── 17_tune_families.py    Optuna TPE para bosque, elastic net y CART cuantílicos (ronda 5)
+│   └── 18_family_table.py     tabla por familia: versión anterior, nueva y boosting 83 (ronda 5)
 ├── stores/
 │   ├── raw/                   datos de Kaggle (train, test, plantilla de envío)
 │   ├── external/              caché de descargas de Bogotá (no se versiona)
@@ -64,6 +70,13 @@ python 13_text_embeddings.py              # embeddings del texto; antes de las f
 python 14_tune_text_ridge.py              # ridge de texto sintonizado; antes de la fila 89
 python 15_optuna_search.py --spec 94 --sampler tpe cmaes --n-trials 60   # antes de la 98
 python 15_optuna_search.py --spec 94 --confirm optuna_tpe
+# Ronda 5 (la receta de la 83 en las demás familias), en este orden:
+python 04_train_models.py --specs 99 100 101 102 --schemes northeast spatial chapinero
+python 17_tune_families.py --spec 99 --n-trials 25    # bosque; ~25 min, se puede cortar y seguir
+python 17_tune_families.py --spec 102 --n-trials 25   # CART
+python 17_tune_families.py --spec 100 --n-trials 15   # elastic net
+python 04_train_models.py --specs 103 104 105 --schemes northeast spatial chapinero
+python 18_family_table.py
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -76,7 +89,7 @@ ya escrito nunca se sobrescribe: si su contenido cambia, se guarda como `_v2`, `
 Los envíos reemplazados por un `_v2`, y las filas 46 a 48 y 52, que tienen un error conocido,
 están en `stores/submissions/obsoletos/`.
 
-Dos archivos pesados no se versionan y se regeneran con los scripts:
+Estos archivos no se versionan y se regeneran con los scripts:
 
 - `stores/processed/oof_predictions.csv`, con las predicciones fuera de muestra y del
   holdout de cada especificación. Lo escribe `04_train_models.py`: cada corrida agrega o
@@ -87,6 +100,8 @@ Dos archivos pesados no se versionan y se regeneran con los scripts:
 - `stores/processed/text_cache/`, la caché de los predictores de texto ya ajustados
   (`models.fit_text_sources`). Su clave incluye las filas, los precios, las fuentes y una
   huella del código de esas clases; se puede borrar sin perder nada.
+- `stores/processed/optuna_round5.db`, el estudio de Optuna de `17_tune_families.py`. Permite
+  cortar una búsqueda y seguirla; si se borra, la búsqueda empieza de cero.
 
 ## Datos y predictores
 
@@ -177,6 +192,12 @@ Cifras en millones de pesos.
 | `07_random_forest_full_coords` | 48 | 93.0 | 146.6 | 181.2 | 191.6 | 189.8 | -134.5 | 34% |
 | `08_boosting_base_text` | 26 | 124.4 | 150.7 | 181.2 | 192.9 | 190.5 | -158.9 | 24% |
 | `09_boosting_full` | 46 | 96.5 | 145.8 | 182.3 | 177.8 | 176.2 | -120.5 | 33% |
+| `100_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge` | 35 | – | 159.5 | 154.4 | 167.5 | 165.8 | -63.8 | 49% |
+| `101_linear_ext_core_coords_splines_by_type_level_q70_ridge` | 35 | – | 163.9 | 157.7 | 167.7 | 166.0 | -64.7 | 49% |
+| `102_cart_ext_core_coords_by_type_level_q70_ridge` | 35 | – | 164.0 | 171.8 | 174.0 | 172.4 | -56.8 | 48% |
+| `103_random_forest_ext_core_coords_by_type_level_q70_ridge_tuned` | 35 | – | 147.4 | 149.9 | 161.8 | 160.2 | -40.8 | 53% |
+| `104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned` | 35 | – | 158.5 | 155.1 | 167.5 | 165.8 | -65.7 | 49% |
+| `105_cart_ext_core_coords_by_type_level_q70_ridge_tuned` | 35 | – | 159.8 | 169.3 | 170.3 | 168.7 | -59.4 | 48% |
 | `10_boosting_full_coords` | 48 | 95.6 | 145.4 | 179.2 | 174.7 | 173.1 | -113.8 | 35% |
 | `11_neural_net_full` | 46 | 146.8 | 196.6 | 237.2 | 194.8 | 193.0 | -44.9 | 46% |
 | `12_boosting_full_coords_weighted` | 48 | 112.7 | 150.1 | 176.5 | 181.2 | 179.1 | -121.0 | 36% |
@@ -251,6 +272,7 @@ Cifras en millones de pesos.
 | `96_xgboost_ext_core_coords_by_type_level_q70_ridge_type_net` | 803 | – | 133.0 | – | 157.1 | 155.4 | -52.4 | 51% |
 | `97_boosting_lot_core_coords_by_type_level_q70_ridge_type_net_s10` | 806 | – | 128.5 | – | 156.1 | 154.4 | -57.1 | 50% |
 | `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | 803 | – | 128.6 | – | 154.6 | 152.9 | -53.8 | 51% |
+| `99_random_forest_ext_core_coords_by_type_level_q70_ridge` | 35 | – | 147.8 | 148.4 | 161.7 | 160.1 | -41.1 | 53% |
 
 "MAE ponderado" es el holdout nororiental ponderado como el test (ronda 3a): el error de los
 inmuebles con anuncios del mismo edificio pesa lo que pesan en el test (24 %). La columna
@@ -292,12 +314,13 @@ como se subió (los envíos 10 y 11, sin OSM), con `08_calibrate_holdout.py`
 | `65_boosting_core_coords_by_type_level_q70` | 160.9 | 162.9 | 159.0 |
 | `75_boosting_core_coords_by_type_level_q70_ridge_v2` | 153.1 | 157.4 | 148.5 |
 | `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10_v2` | 152.1 | 156.6 | 142.4 |
+| `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | 153.4 | 154.6 | sin calcular |
 
 El texto completo del anuncio (ridge sobre TF-IDF, envío 75) explica 7,9 de los 8,9 M que
 gana el 83 frente al 65 en Kaggle. El estrato y el valor del terreno por manzana, junto con
 las 10 semillas, suman 1,0 M, dentro del ruido del tablero público.
 
-Los envíos 49 a 83 se evaluaron directamente en `views/cv_results.csv`, sin pasar por 08.
+Los envíos 49 a 98 se evaluaron directamente en `views/cv_results.csv`, sin pasar por 08.
 Con ellos el holdout nororiental ya no ordena bien: pone el 54 (157.8) por delante del 53
 (162.7) y del 65 (162.9), y en Kaggle el 54 queda 12 M detrás. Diferencias de pocos millones
 en el holdout no sirven para escoger envíos.
@@ -358,6 +381,41 @@ Lectura:
     porque 15 busca, confirma y compara cuantiles con las mismas particiones (holdout
     nororiental y validación espacial). La espacial de la 89 también lo es un poco: 14
     escoge el ridge con las filas de ajuste del holdout, que son casi todo train.
+
+  - (ix) ronda 5: las filas 103 a 105 son algo optimistas, porque 17 sintoniza con el
+    holdout nororiental y la validación espacial. Las filas 99 a 105 no tienen validación
+    aleatoria (se corrieron con `--schemes northeast spatial chapinero`).
+
+### Ronda 5: la receta del boosting en las demás familias
+
+Para comparar algoritmos en igualdad de condiciones, cada familia recibe lo que funcionó en
+la 83: un modelo por tipo, estrato y valor del terreno, el ridge del texto fuera de muestra
+y el precio en niveles llevado al cuantil 0,70 con lo que la familia permite
+(`models.QUANTILE_RECIPES`):
+
+- random forest: bosque de regresión cuantílica (`quantile-forest`), percentil 70 de los
+  precios de entrenamiento de las hojas;
+- CART: árbol sobre el precio en niveles que predice el percentil 70 de cada hoja;
+- elastic net y regresión lineal: splines del log del área, splines aditivos de latitud y
+  longitud con su interacción, esos splines por el área y el área por los acabados del
+  texto, el estrato y el ridge; el nivel se corre con el percentil 70 de los residuos del
+  ajuste. La regresión cuantílica (`QuantileRegressor`) tardó 6 minutos por ajuste y dio
+  una media negativa: la lineal es mínimos cuadrados con la misma corrección. El producto
+  tensorial de splines de ubicación se probó y se descartó (espacial de 246 M).
+
+`views/round5_families.csv` (de `18_family_table.py`), en millones:
+
+| Familia | Versión | MAE ponderado | MAE espacial | Media en test |
+|---|---|---:|---:|---:|
+| Regresión lineal | 03 → 101 | 188.7 → 166.0 | 168.1 → 163.9 | 708 → 860 |
+| Elastic net | 04 → 104 | 178.1 → 165.8 | 159.7 → 158.5 | 717 → 847 |
+| CART | 21 → 105 | 202.0 → 168.7 | 165.9 → 159.8 | 679 → 829 |
+| Random forest | 24 → 103 | 188.3 → 160.2 | 147.2 → 147.4 | 731 → 880 |
+| Red neuronal | 11 → 78 (ya existía) | 193.0 → 155.3 | 196.6 → 164.0 | 830 → 838 |
+| Boosting | 83 | 154.8 | 131.5 | 882 |
+
+Todas mejoran en el holdout ponderado (de 12 a 33 M) y quedan detrás del boosting, sobre
+todo en la validación espacial. Trazas de las búsquedas en `views/tuning_*_q70.csv`.
 
 ### Calibración de nivel (no es un modelo)
 

@@ -11,6 +11,12 @@ Cifras en millones de pesos.
 | `07_random_forest_full_coords` | 48 | 93.0 | 146.6 | 181.2 | 191.6 | 189.8 | -134.5 | 34% |
 | `08_boosting_base_text` | 26 | 124.4 | 150.7 | 181.2 | 192.9 | 190.5 | -158.9 | 24% |
 | `09_boosting_full` | 46 | 96.5 | 145.8 | 182.3 | 177.8 | 176.2 | -120.5 | 33% |
+| `100_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge` | 35 | – | 159.5 | 154.4 | 167.5 | 165.8 | -63.8 | 49% |
+| `101_linear_ext_core_coords_splines_by_type_level_q70_ridge` | 35 | – | 163.9 | 157.7 | 167.7 | 166.0 | -64.7 | 49% |
+| `102_cart_ext_core_coords_by_type_level_q70_ridge` | 35 | – | 164.0 | 171.8 | 174.0 | 172.4 | -56.8 | 48% |
+| `103_random_forest_ext_core_coords_by_type_level_q70_ridge_tuned` | 35 | – | 147.4 | 149.9 | 161.8 | 160.2 | -40.8 | 53% |
+| `104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned` | 35 | – | 158.5 | 155.1 | 167.5 | 165.8 | -65.7 | 49% |
+| `105_cart_ext_core_coords_by_type_level_q70_ridge_tuned` | 35 | – | 159.8 | 169.3 | 170.3 | 168.7 | -59.4 | 48% |
 | `10_boosting_full_coords` | 48 | 95.6 | 145.4 | 179.2 | 174.7 | 173.1 | -113.8 | 35% |
 | `11_neural_net_full` | 46 | 146.8 | 196.6 | 237.2 | 194.8 | 193.0 | -44.9 | 46% |
 | `12_boosting_full_coords_weighted` | 48 | 112.7 | 150.1 | 176.5 | 181.2 | 179.1 | -121.0 | 36% |
@@ -85,3 +91,4 @@ Cifras en millones de pesos.
 | `96_xgboost_ext_core_coords_by_type_level_q70_ridge_type_net` | 803 | – | 133.0 | – | 157.1 | 155.4 | -52.4 | 51% |
 | `97_boosting_lot_core_coords_by_type_level_q70_ridge_type_net_s10` | 806 | – | 128.5 | – | 156.1 | 154.4 | -57.1 | 50% |
 | `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | 803 | – | 128.6 | – | 154.6 | 152.9 | -53.8 | 51% |
+| `99_random_forest_ext_core_coords_by_type_level_q70_ridge` | 35 | – | 147.8 | 148.4 | 161.7 | 160.1 | -41.1 | 53% |

@@ -1,0 +1,19 @@
+family,version,model,test_mean,test_median,test_p95,mae_weighted,mae_spatial
+Regresión lineal,anterior,03_linear_full,707.8,690.0,1077.7,188.7,168.1
+Regresión lineal,nueva,101_linear_ext_core_coords_splines_by_type_level_q70_ridge,860.0,832.1,1378.9,166.0,163.9
+Regresión lineal,boosting 83,83_boosting_ext_core_coords_by_type_level_q70_ridge_s10,881.6,859.5,1456.7,154.8,131.5
+Elastic net,anterior,04_elastic_net_full,717.2,693.4,1161.6,178.1,159.7
+Elastic net,nueva,100_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge,840.1,816.9,1342.2,165.8,159.5
+Elastic net,nueva,104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned,847.4,822.5,1369.8,165.8,158.5
+Elastic net,boosting 83,83_boosting_ext_core_coords_by_type_level_q70_ridge_s10,881.6,859.5,1456.7,154.8,131.5
+CART,anterior,21_cart_full_tuned,678.5,622.8,1124.4,202.0,165.9
+CART,nueva,102_cart_ext_core_coords_by_type_level_q70_ridge,824.6,780.0,1400.0,172.4,164.0
+CART,nueva,105_cart_ext_core_coords_by_type_level_q70_ridge_tuned,828.6,780.0,1400.0,168.7,159.8
+CART,boosting 83,83_boosting_ext_core_coords_by_type_level_q70_ridge_s10,881.6,859.5,1456.7,154.8,131.5
+Random forest,anterior,24_random_forest_full_by_type_per_m2_tuned,730.9,670.0,1283.2,188.3,147.2
+Random forest,nueva,99_random_forest_ext_core_coords_by_type_level_q70_ridge,872.8,845.0,1400.0,160.1,147.8
+Random forest,nueva,103_random_forest_ext_core_coords_by_type_level_q70_ridge_tuned,879.6,850.0,1430.0,160.2,147.4
+Random forest,boosting 83,83_boosting_ext_core_coords_by_type_level_q70_ridge_s10,881.6,859.5,1456.7,154.8,131.5
+Red neuronal,anterior,11_neural_net_full,829.8,761.2,1531.2,193.0,196.6
+Red neuronal,nueva,78_quantile_net_core_coords_by_type_q70,837.8,803.2,1381.4,155.3,164.0
+Red neuronal,boosting 83,83_boosting_ext_core_coords_by_type_level_q70_ridge_s10,881.6,859.5,1456.7,154.8,131.5

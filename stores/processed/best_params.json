@@ -66,5 +66,20 @@
     "regressor__lgbmregressor__colsample_bytree": 0.66136758158468,
     "regressor__lgbmregressor__reg_alpha": 0.003946839018752956,
     "regressor__lgbmregressor__reg_lambda": 0.11900645598177767
+  },
+  "random_forest_q70": {
+    "regressor__randomforestquantileregressor__min_samples_leaf": 3,
+    "regressor__randomforestquantileregressor__max_features": 0.31157204111502623,
+    "regressor__randomforestquantileregressor__max_depth": 20
+  },
+  "cart_q70": {
+    "regressor__leafquantiletree__max_depth": 13,
+    "regressor__leafquantiletree__min_samples_leaf": 59,
+    "regressor__leafquantiletree__ccp_alpha": 1.3305389999376358
+  },
+  "elastic_net_q70": {
+    "regressor__quantileshift__regressor__alpha": 0.0025352851143500667,
+    "regressor__quantileshift__regressor__l1_ratio": 0.6575532292934886,
+    "regressor__splinedesign__n_knots_geo": 8
   }
 }
