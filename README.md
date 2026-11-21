@@ -257,8 +257,14 @@ como se subió (los envíos 10 y 11, sin OSM), con `08_calibrate_holdout.py`
 | `54_en_boosting_core_coords_residual_q65` | 173.3 | 157.8 | 157.9 |
 | `53_boosting_core_coords_by_type_level_q65` | 161.7 | 162.7 | 162.0 |
 | `65_boosting_core_coords_by_type_level_q70` | 160.9 | 162.9 | 159.0 |
+| `75_boosting_core_coords_by_type_level_q70_ridge_v2` | 153.1 | 157.4 | 148.5 |
+| `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10_v2` | 152.1 | 156.6 | 142.4 |
 
-Los envíos 49 a 65 se evaluaron directamente en `views/cv_results.csv`, sin pasar por 08.
+El texto completo del anuncio (ridge sobre TF-IDF, envío 75) explica 7,9 de los 8,9 M que
+gana el 83 frente al 65 en Kaggle. El estrato y el valor del terreno por manzana, junto con
+las 10 semillas, suman 1,0 M, dentro del ruido del tablero público.
+
+Los envíos 49 a 83 se evaluaron directamente en `views/cv_results.csv`, sin pasar por 08.
 Con ellos el holdout nororiental ya no ordena bien: pone el 54 (157.8) por delante del 53
 (162.7) y del 65 (162.9), y en Kaggle el 54 queda 12 M detrás. Diferencias de pocos millones
 en el holdout no sirven para escoger envíos.
