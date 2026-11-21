@@ -67,6 +67,14 @@ python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
 `05_tune_models.py` guarda los mejores hiperparámetros en `stores/processed/best_params.json`;
 `04_train_models.py` los usa solo en las especificaciones marcadas `tuned=True`. Un envío
 ya escrito nunca se sobrescribe: si su contenido cambia, se guarda como `_v2`, `_v3`...
+Los envíos reemplazados por un `_v2`, y las filas 46 a 48 y 52, que tienen un error conocido,
+están en `stores/submissions/obsoletos/`.
+
+Dos archivos pesados no se versionan y se regeneran con los scripts:
+
+- `stores/processed/oof_predictions.csv`, con las predicciones fuera de muestra y del
+  holdout de cada especificación. Lo escribe `04_train_models.py`: cada corrida agrega o
+  reemplaza las columnas de las especificaciones y los esquemas que corre.
 
 ## Datos y predictores
 

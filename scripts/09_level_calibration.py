@@ -18,7 +18,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from utils import (ID_COL, PROCESSED_DIR, SUBMISSIONS_DIR, TARGET, VIEWS_DIR, error_summary,
+from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, error_summary, find_submission,
                    save_submission)
 
 
@@ -42,7 +42,7 @@ def main():
     parser.add_argument("--number", type=int, required=True, help="primer número de envío")
     args = parser.parse_args()
 
-    base = pd.read_csv(SUBMISSIONS_DIR / f"{args.submission}.csv")
+    base = pd.read_csv(find_submission(f"{args.submission}.csv"))
     model = args.model or re.sub(r"_v\d+$", "", args.submission)
     stem = args.submission.split("_", 1)[1]
     rows = []

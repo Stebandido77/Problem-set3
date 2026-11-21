@@ -31,6 +31,8 @@ ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "stores" / "raw"
 PROCESSED_DIR = ROOT / "stores" / "processed"
 SUBMISSIONS_DIR = ROOT / "stores" / "submissions"
+# Envíos reemplazados por una versión corregida (_v2) o con un error conocido (46-48, 52).
+OBSOLETE_DIR = SUBMISSIONS_DIR / "obsoletos"
 VIEWS_DIR = ROOT / "views"
 OSM_POIS_PATH = PROCESSED_DIR / "osm_pois.csv"
 BEST_PARAMS_PATH = PROCESSED_DIR / "best_params.json"
@@ -299,14 +301,21 @@ def error_summary(y_true, y_pred):
     }
 
 
+def find_submission(file_name):
+    """Ruta de un envío guardado, en la carpeta de envíos o en la de obsoletos."""
+    path = SUBMISSIONS_DIR / file_name
+    return path if path.exists() else OBSOLETE_DIR / file_name
+
+
 def submission_path(out, name):
-    """Ruta libre para un envío. Un envío ya escrito no se sobrescribe: si el contenido
-    cambió, se guarda como <name>_v2, <name>_v3...; si es idéntico, se reutiliza."""
-    candidates = [SUBMISSIONS_DIR / f"{name}.csv"]
-    candidates += [SUBMISSIONS_DIR / f"{name}_v{k}.csv" for k in range(2, 100)]
-    for path in candidates:
+    """Ruta libre para un envío. Un envío ya escrito (también si está en obsoletos) no se
+    sobrescribe: si el contenido cambió, se guarda como <name>_v2, <name>_v3...; si es
+    idéntico, se reutiliza."""
+    candidates = [f"{name}.csv"] + [f"{name}_v{k}.csv" for k in range(2, 100)]
+    for file_name in candidates:
+        path = find_submission(file_name)
         if not path.exists():
-            return path
+            return SUBMISSIONS_DIR / file_name
         existing = pd.read_csv(path)
         if (list(existing[ID_COL]) == list(out[ID_COL])
                 and np.array_equal(existing[TARGET].to_numpy(float), out[TARGET].to_numpy(float))):
