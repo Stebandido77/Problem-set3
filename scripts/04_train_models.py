@@ -449,6 +449,13 @@ ROUND_7C = [Spec("boosting", "ext_core_coords", f"by_type_level_q{q}_ridge_{labe
                  text_sources=("ridge",), target="level", by_type=True,
                  params=quantile_loss(q / 100), **extra)
             for label, extra in BALANCE for q in (55, 60, 65, 70)]
+# Pieza B2: la red cuantílica por tipo (78) con la receta de la 83 (estrato, valor del
+# terreno y el ridge del texto) y sin lat ni lon, que viajan mal a Chapinero.
+ROUND_7D_START = 148
+ROUND_7D = [
+    Spec("quantile_net", "ext_core_coords", "by_type_q70_ridge_nocoords", target="level",
+         by_type=True, text_sources=("ridge",), drop_coords=True),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -462,7 +469,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_6, start=ROUND_6_START)),
                   **dict(enumerate(ROUND_7, start=ROUND_7_START)),
                   **dict(enumerate(ROUND_7B, start=ROUND_7B_START)),
-                  **dict(enumerate(ROUND_7C, start=ROUND_7C_START))}
+                  **dict(enumerate(ROUND_7C, start=ROUND_7C_START)),
+                  **dict(enumerate(ROUND_7D, start=ROUND_7D_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
