@@ -34,7 +34,8 @@ destruye capital?
 │   ├── 15_optuna_search.py    Optuna TPE contra CMA-ES para el LightGBM (ronda 4)
 │   ├── 16_download_lots.py    lote, pisos y área construida del catastro (ronda 4)
 │   ├── 17_tune_families.py    Optuna TPE para bosque, elastic net y CART cuantílicos (ronda 5)
-│   └── 18_family_table.py     tabla por familia: versión anterior, nueva y boosting 83 (ronda 5)
+│   ├── 18_family_table.py     tabla por familia: versión anterior, nueva y boosting 83 (ronda 5)
+│   └── 19_genetic_search.py   NSGA-II (genético) para el bosque cuantílico (ronda 6)
 ├── stores/
 │   ├── raw/                   datos de Kaggle (train, test, plantilla de envío)
 │   ├── external/              caché de descargas de Bogotá (no se versiona)
@@ -77,6 +78,12 @@ python 17_tune_families.py --spec 102 --n-trials 25   # CART
 python 17_tune_families.py --spec 100 --n-trials 15   # elastic net
 python 04_train_models.py --specs 103 104 105 --schemes northeast spatial chapinero
 python 18_family_table.py
+# Ronda 6 (el bosque contra el boosting), en este orden:
+python 04_train_models.py --specs 106 107 108 109 110 --schemes northeast spatial chapinero random_twins
+python 19_genetic_search.py --spec 107 --sampler nsga2 --n-trials 120   # ~60 min, reanudable
+python 19_genetic_search.py --spec 107 --confirm
+python 04_train_models.py --specs 112 113 114 115 --schemes northeast spatial chapinero
+python 06_ensemble.py --number 116 --how weighted --weights 0.8 0.2 --models     83_boosting_ext_core_coords_by_type_level_q70_ridge_s10     114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords   # y 117-119
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -100,8 +107,9 @@ Estos archivos no se versionan y se regeneran con los scripts:
 - `stores/processed/text_cache/`, la caché de los predictores de texto ya ajustados
   (`models.fit_text_sources`). Su clave incluye las filas, los precios, las fuentes y una
   huella del código de esas clases; se puede borrar sin perder nada.
-- `stores/processed/optuna_round5.db`, el estudio de Optuna de `17_tune_families.py`. Permite
-  cortar una búsqueda y seguirla; si se borra, la búsqueda empieza de cero.
+- `stores/processed/optuna_round5.db` y `optuna_round6.db`, los estudios de Optuna de
+  `17_tune_families.py` y `19_genetic_search.py`. Permiten cortar una búsqueda y seguirla;
+  si se borran, la búsqueda empieza de cero.
 
 ## Datos y predictores
 
@@ -198,7 +206,20 @@ Cifras en millones de pesos.
 | `103_random_forest_ext_core_coords_by_type_level_q70_ridge_tuned` | 35 | – | 147.4 | 149.9 | 161.8 | 160.2 | -40.8 | 53% |
 | `104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned` | 35 | – | 158.5 | 155.1 | 167.5 | 165.8 | -65.7 | 49% |
 | `105_cart_ext_core_coords_by_type_level_q70_ridge_tuned` | 35 | – | 159.8 | 169.3 | 170.3 | 168.7 | -59.4 | 48% |
+| `106_random_forest_ext_core_coords_by_type_level_q70_net_tuned` | 803 | – | 151.8 | 154.6 | 165.5 | 163.9 | -45.2 | 53% |
+| `107_random_forest_ext_core_coords_by_type_level_q70_ridge_net_tuned` | 803 | – | 145.7 | 147.9 | 161.7 | 160.0 | -42.5 | 53% |
+| `108_linear_ext_core_coords_splines_by_type_level_q70_ridge_oof` | 35 | – | 164.1 | 157.8 | 167.6 | 166.0 | -64.6 | 49% |
+| `109_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned_oof` | 35 | – | 158.8 | 155.1 | 167.4 | 165.7 | -65.4 | 49% |
 | `10_boosting_full_coords` | 48 | 95.6 | 145.4 | 179.2 | 174.7 | 173.1 | -113.8 | 35% |
+| `110_cart_ext_core_coords_by_type_level_q70_ridge_tuned_oof` | 35 | – | 161.6 | 169.4 | 170.3 | 168.6 | -56.8 | 50% |
+| `112_random_forest_ext_core_coords_by_type_level_q70_ridge_net_resid` | 803 | – | 145.3 | 153.3 | 161.0 | 159.4 | -32.3 | 55% |
+| `113_random_forest_ext_core_coords_by_type_level_q70_ridge_net_extra` | 803 | – | 147.1 | 141.1 | 159.0 | 157.5 | -50.4 | 51% |
+| `114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords` | 803 | – | 143.8 | 147.5 | 161.3 | 159.6 | -45.3 | 52% |
+| `115_random_forest_ext_core_coords_by_type_level_q70_ridge_net_extra_nocoords` | 803 | – | 146.5 | 140.4 | 159.2 | 157.6 | -51.9 | 51% |
+| `116_ensemble_w80_20_2` | – | – | 132.4 | 142.2 | 156.8 | 155.1 | -53.4 | 51% |
+| `117_ensemble_w70_30_2` | – | – | 133.2 | 142.4 | 157.1 | 155.3 | -52.4 | 51% |
+| `118_ensemble_w60_40_2` | – | – | 134.1 | 142.6 | 157.4 | 155.7 | -51.4 | 51% |
+| `119_ensemble_w50_50_2` | – | – | 135.3 | 143.1 | 157.9 | 156.2 | -50.4 | 52% |
 | `11_neural_net_full` | 46 | 146.8 | 196.6 | 237.2 | 194.8 | 193.0 | -44.9 | 46% |
 | `12_boosting_full_coords_weighted` | 48 | 112.7 | 150.1 | 176.5 | 181.2 | 179.1 | -121.0 | 36% |
 | `13_random_forest_full_weighted` | 46 | 107.1 | 151.2 | 179.2 | 193.9 | 191.8 | -137.8 | 34% |
@@ -384,7 +405,9 @@ Lectura:
 
   - (ix) ronda 5: las filas 103 a 105 son algo optimistas, porque 17 sintoniza con el
     holdout nororiental y la validación espacial. Las filas 99 a 105 no tienen validación
-    aleatoria (se corrieron con `--schemes northeast spatial chapinero`).
+    aleatoria clásica; la aleatoria con gemelos se agregó en la ronda 6 (99 a 115).
+  - (x) ronda 6: la columna `tuned` de `cv_results.csv` dice `False` en las filas 109, 110,
+    112, 113 y 115, que reciben los hiperparámetros sintonizados por `moved_params`.
 
 ### Ronda 5: la receta del boosting en las demás familias
 
@@ -416,6 +439,27 @@ y el precio en niveles llevado al cuantil 0,70 con lo que la familia permite
 
 Todas mejoran en el holdout ponderado (de 12 a 33 M) y quedan detrás del boosting, sobre
 todo en la validación espacial. Trazas de las búsquedas en `views/tuning_*_q70.csv`.
+
+### Ronda 6: el bosque contra el boosting
+
+Sobre el bosque cuantílico de la 103 (160,2 ponderado, 147,4 espacial), en millones:
+
+| Fila | Cambio | MAE ponderado | MAE espacial | Media en test |
+|---|---|---:|---:|---:|
+| 106 | texto con la red de la ronda 4 en vez del ridge | 163,9 | 151,8 | 863 |
+| 107 | ridge + red | 160,0 | 145,7 | 870 |
+| 112 | bosque sobre residuos de un lineal | 159,4 | 145,3 | 908 |
+| 113 | ExtraTrees cuantílico | 157,5 | 147,1 | 842 |
+| 114 | sin latitud ni longitud crudas | 159,6 | 143,8 | 866 |
+| 115 | 113 + 114 | 157,6 | 146,5 | 838 |
+| 116–119 | 83 con 114, pesos 80/20 a 50/50 | 155,1–156,2 | 132,4–135,3 | 874–878 |
+| 83 | boosting (referencia) | 154,8 | 131,5 | 882 |
+
+Ninguna variante mejora a la 103 por más de 2 M en los dos criterios, y ninguna mezcla le
+gana a la 83. El genético (NSGA-II, 20 × 6, `views/genetic_*.csv`) no supera a los
+hiperparámetros de la 103 con 5 semillas (153,26 ± 0,27 frente a 152,92 ± 0,14 M). La
+corrección de nivel con residuos fuera de muestra (108 a 110) no cambia las lineales ni el
+CART. La correlación entre la 83 y la 114 en test es 0,975.
 
 ### Calibración de nivel (no es un modelo)
 
