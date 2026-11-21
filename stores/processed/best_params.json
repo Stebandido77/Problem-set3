@@ -44,5 +44,27 @@
       3
     ],
     "max_features": 200000
+  },
+  "optuna_tpe": {
+    "regressor__lgbmregressor__num_leaves": 41,
+    "regressor__lgbmregressor__max_depth": 9,
+    "regressor__lgbmregressor__learning_rate": 0.04345732838324544,
+    "regressor__lgbmregressor__n_estimators": 2723,
+    "regressor__lgbmregressor__min_child_samples": 41,
+    "regressor__lgbmregressor__subsample": 0.8311898013241485,
+    "regressor__lgbmregressor__colsample_bytree": 0.4147819726785432,
+    "regressor__lgbmregressor__reg_alpha": 0.03989831856934146,
+    "regressor__lgbmregressor__reg_lambda": 0.014095244365325242
+  },
+  "optuna_cmaes": {
+    "regressor__lgbmregressor__num_leaves": 56,
+    "regressor__lgbmregressor__max_depth": 14,
+    "regressor__lgbmregressor__learning_rate": 0.040170994963765604,
+    "regressor__lgbmregressor__n_estimators": 2450,
+    "regressor__lgbmregressor__min_child_samples": 52,
+    "regressor__lgbmregressor__subsample": 0.5382431440404442,
+    "regressor__lgbmregressor__colsample_bytree": 0.66136758158468,
+    "regressor__lgbmregressor__reg_alpha": 0.003946839018752956,
+    "regressor__lgbmregressor__reg_lambda": 0.11900645598177767
   }
 }
