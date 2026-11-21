@@ -1,0 +1,17 @@
+rule,scheme,n_changed,mae_changed_before,mae_changed_after,mae_before,mae_after,mae_weighted_before,mae_weighted_after,test_mean_before,test_mean_after,model
+median,random,11098,60312224.06057396,15154394.362632906,95905629.01556762,82936950.86260304,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+median,spatial,582,159949630.16106793,160629994.69415808,127128523.06396618,127138769.72989774,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+median,northeast,152,179205941.7125413,174080159.90789473,157564558.98817918,157450984.8140821,155718328.47906727,155542874.6038114,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+median,test,200,,,,,,,878475174.508073,876962271.1228428,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix,random,11097,60317658.46092585,36169095.97191595,95905629.01556762,88971134.5646845,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix,spatial,582,159949630.16106793,148372110.56284192,127128523.06396618,126954159.21948406,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix,northeast,152,179205941.7125413,172380175.45351112,157564558.98817918,157413317.52004907,155718328.47906727,155538151.91429108,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix,test,200,,,,,,,878475174.508073,877718722.8154579,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+avg,random,4045,60979786.34787593,68217445.33480687,95905629.01556762,96663219.670259,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+avg,spatial,10127,122294270.05909538,123765845.09035306,127128523.06396618,127514161.8290489,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+avg,northeast,1692,164665132.4037691,165976015.7760282,157564558.98817918,157887884.74122036,155718328.47906727,156008936.26369295,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+avg,test,2993,,,,,,,878475174.508073,878475174.508073,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix_avg,random,12101,63888509.03966439,43170116.91397734,95905629.01556762,89417861.81717691,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix_avg,spatial,10324,122534663.18391338,122841284.73528919,127128523.06396618,127210438.6263488,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix_avg,northeast,1755,162764457.22442532,162980362.81268317,157564558.98817918,157619794.30995652,155718328.47906727,155729861.63759977,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+mix_avg,test,3091,,,,,,,878475174.508073,877718722.8154579,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10

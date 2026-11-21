@@ -460,14 +460,148 @@ class EmbeddingSVD(BaseEstimator):
         return {f"emb_svd_{k}": components[:, k] for k in range(self.n_components)}
 
 
-def text_code_version():
+class TextNet(BaseEstimator):
+    """Fuente de texto de TextPredictors (ronda 7, pieza D): red densa del log del precio
+    (pérdida cuadrática, como el ridge) sobre una representación del texto completo:
+    - 'tfidf': el mismo TF-IDF del ridge (palabras y bigramas, min_df 5); la primera capa es
+      lineal sobre la matriz dispersa (una bolsa de pesos TF-IDF);
+    - 'svd': los 'n_components' primeros componentes de la SVD de ese TF-IDF;
+    - 'hash': tipo fastText, embeddings de palabras y bigramas aprendidos desde cero con los
+      precios (EmbeddingBag con el promedio, vocabulario por hashing de 2^18 cubetas).
+    Vectorizador y SVD se ajustan con las filas de ajuste. Cada fila de ajuste recibe la
+    predicción de la red de la partición interna que no la vio; las filas nuevas, el
+    promedio de esas redes. Parada temprana con un 10 % de cada ajuste interno."""
+
+    def __init__(self, name="txt_tfidf_net", representation="tfidf", n_components=300,
+                 embed_dim=64, hidden=(64,), dropout=0.3, lr=2e-3, weight_decay=1e-6,
+                 max_epochs=20, patience=3, batch_size=256):
+        self.name = name
+        self.representation = representation
+        self.n_components = n_components
+        self.embed_dim = embed_dim
+        self.hidden = hidden
+        self.dropout = dropout
+        self.lr = lr
+        self.weight_decay = weight_decay
+        self.max_epochs = max_epochs
+        self.patience = patience
+        self.batch_size = batch_size
+
+    def inputs(self):
+        return ["text"]
+
+    def _vectorizer(self):
+        from sklearn.feature_extraction.text import HashingVectorizer
+        if self.representation == "hash":
+            return HashingVectorizer(ngram_range=(1, 2), n_features=2 ** 18, norm="l1",
+                                     alternate_sign=False, strip_accents="unicode",
+                                     dtype=np.float32)
+        return TfidfVectorizer(ngram_range=(1, 2), min_df=5, max_features=100_000,
+                               sublinear_tf=True, strip_accents="unicode", dtype=np.float32)
+
+    def _represent(self, text):
+        matrix = self.vectorizer_.transform(text)
+        if self.representation == "svd":
+            return self.scaler_.transform(self.svd_.transform(matrix)).astype(np.float32)
+        return matrix.tocsr()
+
+    def _network(self, n_inputs):
+        import torch.nn as nn
+        first = (nn.Linear(n_inputs, self.embed_dim) if self.representation == "svd"
+                 else nn.EmbeddingBag(n_inputs, self.embed_dim, mode="sum"))
+        layers, width = [nn.ReLU(), nn.Dropout(self.dropout)], self.embed_dim
+        for size in self.hidden:
+            layers += [nn.Linear(width, size), nn.ReLU(), nn.Dropout(self.dropout)]
+            width = size
+        return nn.ModuleDict({"first": first, "rest": nn.Sequential(*layers,
+                                                                   nn.Linear(width, 1))})
+
+    def _forward(self, net, Z, rows):
+        import torch
+        if self.representation == "svd":
+            hidden = net["first"](torch.from_numpy(Z[rows]))
+        else:
+            batch = Z[rows]
+            hidden = net["first"](torch.from_numpy(batch.indices.astype(np.int64)),
+                                  torch.from_numpy(batch.indptr[:-1].astype(np.int64)),
+                                  per_sample_weights=torch.from_numpy(batch.data))
+        return net["rest"](hidden).squeeze(1)
+
+    def _train(self, Z, target, groups, seed):
+        import copy
+        import torch
+        torch.set_num_threads(8)
+        torch.manual_seed(seed)
+        rng = np.random.default_rng(seed)
+        unique = np.unique(groups)
+        early = np.isin(groups, rng.choice(unique, max(len(unique) // 10, 1), replace=False))
+        fit_rows, stop_rows = np.flatnonzero(~early), np.flatnonzero(early)
+        net = self._network(Z.shape[1])
+        optimizer = torch.optim.Adam(net.parameters(), lr=self.lr,
+                                     weight_decay=self.weight_decay)
+        y = torch.tensor(target, dtype=torch.float32)
+        best, best_state, waited = np.inf, None, 0
+        for _ in range(self.max_epochs):
+            net.train()
+            for batch in np.array_split(rng.permutation(fit_rows),
+                                        max(len(fit_rows) // self.batch_size, 1)):
+                optimizer.zero_grad()
+                loss = ((self._forward(net, Z, batch) - y[batch]) ** 2).mean()
+                loss.backward()
+                optimizer.step()
+            net.eval()
+            with torch.no_grad():
+                stop_loss = ((self._forward(net, Z, stop_rows) - y[stop_rows]) ** 2).mean().item()
+            if stop_loss < best - 1e-5:
+                best, best_state, waited = stop_loss, copy.deepcopy(net.state_dict()), 0
+            else:
+                waited += 1
+                if waited >= self.patience:
+                    break
+        net.load_state_dict(best_state)
+        return net.eval()
+
+    def _predict(self, net, Z):
+        import torch
+        with torch.no_grad():
+            return self._forward(net, Z, np.arange(Z.shape[0])).numpy() * self.scale_ + self.center_
+
+    def fit_features(self, X, log_y, folds):
+        self.vectorizer_ = self._vectorizer().fit(X["text"])
+        if self.representation == "svd":
+            matrix = self.vectorizer_.transform(X["text"])
+            self.svd_ = TruncatedSVD(self.n_components, random_state=SEED).fit(matrix)
+            self.scaler_ = StandardScaler().fit(self.svd_.transform(matrix))
+        Z = self._represent(X["text"])
+        self.center_, self.scale_ = float(np.mean(log_y)), float(np.std(log_y))
+        target = (log_y - self.center_) / self.scale_
+        groups = twin_groups(X)
+        out = np.zeros(len(log_y))
+        self.nets_ = []
+        for k, (fit_idx, pred_idx) in enumerate(folds):
+            net = self._train(Z[fit_idx], target[fit_idx], groups[fit_idx], SEED + k)
+            if len(pred_idx):
+                out[pred_idx] = self._predict(net, Z[pred_idx])
+            self.nets_.append(net)
+        return {self.name: out}
+
+    def transform(self, X):
+        Z = self._represent(X["text"])
+        return {self.name: np.mean([self._predict(net, Z) for net in self.nets_], axis=0)}
+
+
+def text_code_version(source=None):
     """Huella del código que define los predictores de texto y de la semilla: entra en la
-    clave de la caché para que un cambio en esas clases no devuelva resultados viejos."""
+    clave de la caché para que un cambio en esas clases no devuelva resultados viejos. Las
+    fuentes de la ronda 7 (TextNet) suman su propio código, sin cambiar la huella de las
+    anteriores (así su caché sigue sirviendo)."""
     import hashlib
     import inspect
     import utils
     code = "".join(inspect.getsource(obj) for obj in (
         RidgeText, EmbeddingNet, EmbeddingSVD, QuantileNet, ByPropertyType, utils.twin_groups))
+    if isinstance(source, TextNet):
+        code += inspect.getsource(TextNet)
     return hashlib.sha256(f"{code}{SEED}{utils.TWIN_DISTANCE_M}".encode()).hexdigest()
 
 
@@ -513,7 +647,7 @@ class TextPredictors(RegressorMixin, BaseEstimator):
             inputs = ["is_house", "lat", "lon", "text"] + TWIN_COLUMNS + source.inputs()
             fitted, source_features = fit_text_sources(
                 (source,), X[list(dict.fromkeys(inputs))], np.asarray(y, dtype=float),
-                text_code_version())
+                text_code_version(source))
             self.sources_ += fitted
             features.update(source_features)
         return self._drop_raw(X).assign(**features)
@@ -741,6 +875,34 @@ class SyntheticTail(RegressorMixin, BaseEstimator):
         X_all = pd.concat([X, pd.DataFrame(synthetic, columns=X.columns)], ignore_index=True)
         self.n_synthetic_ = n_new
         self.model_ = fit_model(clone(self.model), X_all, np.concatenate([y, y_new]))
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X)
+
+
+class TailOversample(RegressorMixin, BaseEstimator):
+    """Sobremuestreo de los inmuebles caros del nororiente (ronda 7, pieza C): las filas de
+    ajuste a menos de 'max_dist_m' de la Zona T con precio en el 'top_share' más alto de esa
+    zona se repiten hasta 'copies' veces en total. El umbral y las copias salen solo de las
+    filas de ajuste de cada partición; la validación y el test no se tocan."""
+
+    def __init__(self, model, copies=2, top_share=0.2, max_dist_m=4000):
+        self.model = model
+        self.copies = copies
+        self.top_share = top_share
+        self.max_dist_m = max_dist_m
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        northeast = (X["dist_zona_t_m"] <= self.max_dist_m).to_numpy()
+        cutoff = np.quantile(y[northeast], 1 - self.top_share)
+        rare = np.flatnonzero(northeast & (y >= cutoff))
+        rows = np.r_[np.arange(len(y)), np.tile(rare, self.copies - 1)]
+        self.n_added_ = len(rows) - len(y)
+        w = None if sample_weight is None else np.asarray(sample_weight)[rows]
+        self.model_ = fit_model(clone(self.model), X.iloc[rows].reset_index(drop=True),
+                                y[rows], w)
         return self
 
     def predict(self, X):
@@ -983,25 +1145,33 @@ class SplineDesign(TransformerMixin, BaseEstimator):
     Con tensor=True la ubicación entra como producto tensorial de los splines (una
     superficie libre). Se probó en la ronda 5 y se descartó: en la validación espacial los
     bloques sin datos de ajuste reciben coeficientes arbitrarios y el MAE sube de 158 a
-    246 M en la lineal."""
+    246 M en la lineal.
+
+    Con use_coords=False (ronda 7, pieza B) lat y lon no entran de ninguna forma: ni crudas
+    ni en splines ni multiplicadas por el área. La ubicación llega solo por el estrato, el
+    valor del terreno y las distancias. Las columnas siguen en X para agrupar gemelos."""
 
     def __init__(self, n_knots_geo=6, n_knots_area=6, area_col="surface",
-                 area_by_location=True, tensor=False):
+                 area_by_location=True, tensor=False, use_coords=True):
         self.n_knots_geo = n_knots_geo
         self.n_knots_area = n_knots_area
         self.area_col = area_col
         self.area_by_location = area_by_location
         self.tensor = tensor
+        self.use_coords = use_coords
 
     def fit(self, X, y=None):
+        if not self.use_coords:
+            X = X.drop(columns=["lat", "lon"])
         self.medians_ = X.median()
         self.missing_ = [c for c in X.columns if X[c].isna().any()]
         self.quality_ = [c for c in QUALITY_COLUMNS if c in X.columns]
         area = X[self.area_col].fillna(self.medians_[self.area_col])
         self.area_range_ = np.quantile(area, [0.005, 0.995])
         filled = X.fillna(self.medians_)
-        self.lat_ = SplineTransformer(self.n_knots_geo).fit(filled[["lat"]])
-        self.lon_ = SplineTransformer(self.n_knots_geo).fit(filled[["lon"]])
+        if self.use_coords:
+            self.lat_ = SplineTransformer(self.n_knots_geo).fit(filled[["lat"]])
+            self.lon_ = SplineTransformer(self.n_knots_geo).fit(filled[["lon"]])
         self.area_spline_ = SplineTransformer(self.n_knots_area).fit(
             np.log(self._area(filled))[:, None])
         self.scaler_ = StandardScaler().fit(self._design(X))
@@ -1010,20 +1180,28 @@ class SplineDesign(TransformerMixin, BaseEstimator):
     def _area(self, filled):
         return np.clip(filled[self.area_col].to_numpy(float), *self.area_range_)
 
+    def _location(self, filled):
+        lat, lon = self.lat_.transform(filled[["lat"]]), self.lon_.transform(filled[["lon"]])
+        if self.tensor:
+            return (lat[:, :, None] * lon[:, None, :]).reshape(len(filled), -1)
+        return np.hstack([lat, lon, (filled["lat"] * filled["lon"]).to_numpy()[:, None]])
+
     def _design(self, X):
         filled = X.fillna(self.medians_)
         area = self._area(filled)
-        lat, lon = self.lat_.transform(filled[["lat"]]), self.lon_.transform(filled[["lon"]])
-        surface = ((lat[:, :, None] * lon[:, None, :]).reshape(len(X), -1) if self.tensor
-                   else np.hstack([lat, lon, (filled["lat"] * filled["lon"]).to_numpy()[:, None]]))
+        # El orden de los bloques es el de la ronda 5: el elastic net elige coordenadas al
+        # azar, así que cambiarlo movería los resultados de las filas anteriores.
+        surface = self._location(filled) if self.use_coords else np.empty((len(X), 0))
         blocks = [filled.to_numpy(float), X[self.missing_].isna().to_numpy(float),
                   self.area_spline_.transform(np.log(area)[:, None]), surface,
                   area[:, None] * filled[self.quality_].to_numpy(float)]
-        if self.area_by_location:
+        if self.use_coords and self.area_by_location:
             blocks.append(area[:, None] * surface)
         return np.hstack(blocks)
 
     def transform(self, X):
+        if not self.use_coords:
+            X = X.drop(columns=["lat", "lon"])
         return self.scaler_.transform(self._design(X))
 
 
@@ -1157,6 +1335,27 @@ class DropColumns(RegressorMixin, BaseEstimator):
         return self.model_.predict(X.drop(columns=list(self.columns)))
 
 
+class RoundColumns(RegressorMixin, BaseEstimator):
+    """Redondea columnas antes del modelo (ronda 7, pieza A4): con lat y lon a 3 decimales
+    (unos 100 m) el modelo ve la zona, no el punto exacto. Como DropColumns, deja intactas
+    las coordenadas que usa el texto fuera de muestra para agrupar gemelos."""
+
+    def __init__(self, model, columns=("lat", "lon"), decimals=3):
+        self.model = model
+        self.columns = columns
+        self.decimals = decimals
+
+    def _round(self, X):
+        return X.assign(**{c: X[c].round(self.decimals) for c in self.columns})
+
+    def fit(self, X, y, sample_weight=None):
+        self.model_ = fit_model(clone(self.model), self._round(X), y, sample_weight)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(self._round(X))
+
+
 # Ronda 6: variantes con nombre propio (Spec.recipe).
 ROUND6_RECIPES = {
     "q70_et": quantile_extra_trees,
@@ -1168,6 +1367,13 @@ ROUND6_RECIPES = {
     "q70_oof_elastic_net": lambda: QuantileShift(make_pipeline(SplineDesign(), ElasticNet(
         alpha=0.01, l1_ratio=0.5, max_iter=2000, tol=1e-3, selection="random",
         random_state=SEED)), oof=True),
+    # Ronda 7, pieza B: las mismas lineales sin ningún término de lat ni lon.
+    "q70_oof_linear_nogeo": lambda: QuantileShift(
+        make_pipeline(SplineDesign(use_coords=False), LinearRegression()), oof=True),
+    "q70_oof_elastic_net_nogeo": lambda: QuantileShift(make_pipeline(
+        SplineDesign(use_coords=False), ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=2000,
+                                                   tol=1e-3, selection="random",
+                                                   random_state=SEED)), oof=True),
     # El árbol ya predice el percentil 70 de cada hoja; el corrimiento fuera de muestra
     # corrige lo que le falte al percentil de la misma muestra. Va en pesos (scale=1): el
     # árbol ya pasa el precio a millones, y con los dos cambios de escala la poda

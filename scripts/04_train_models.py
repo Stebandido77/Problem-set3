@@ -30,7 +30,7 @@ from joblib import Parallel, delayed
 from models import (FAMILIES, ByPropertyType, DropColumns, EmbeddingNet, EmbeddingSVD,
                     FocusFineTune, ImputedArea, NameLevel, NeighborhoodLevel, PriceWeighted,
                     QuantileNet,
-                    ResidualBoosting, RidgeText, SameBuilding, SeedAverage, SyntheticTail,
+                    ResidualBoosting, RidgeText, RoundColumns, TailOversample, SameBuilding, SeedAverage, SyntheticTail,
                     TextFeatures, TextPredictors, TruncationCorrection, build_model,
                     fit_model, load_best_params, northeast_building_groups)
 from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, add_embeddings,
@@ -82,6 +82,8 @@ class Spec:
     recipe: str = ""             # 'q70': versión cuantílica de la ronda 5 (QUANTILE_RECIPES);
                                  # otras: variantes de la ronda 6 (ROUND6_RECIPES)
     drop_coords: bool = False    # el modelo no ve lat ni lon (sí el texto, para los gemelos)
+    round_coords: int = 0        # decimales a los que se redondean lat y lon (RoundColumns)
+    oversample: int = 0          # copias del 20 % más caro del nororiente (TailOversample)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -400,6 +402,53 @@ ROUND_6 = [
          drop_coords=True,
          params=moved_params(BEST_FOREST_KEY, [(FOREST_STEP, EXTRA_STEP)]) + EXTRA_BOOTSTRAP),
 ]
+# Ronda 7: cuatro ideas sobre la receta de la 83, una a la vez con una semilla, contra la 82
+# (la 83 con una semilla; su txt_ridge es el mismo de la fuente 'ridge'). Criterio: holdout
+# ponderado y validación espacial.
+ROUND_7_START = 120
+R7 = dict(text_sources=("ridge",), **Q70)
+ROUND_7 = [
+    # A1. Área y baños de los anuncios del mismo punto, alcobas y tipo (sin precios).
+    Spec("boosting", "pt_core_coords", "by_type_level_q70_ridge", **R7),
+    # A4. Sin latitud ni longitud crudas, y con ellas redondeadas a 3 decimales (~100 m).
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_nocoords", drop_coords=True,
+         **R7),
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_coords3", round_coords=3,
+         **R7),
+    # Juntas: A1 y A4 sin coordenadas (las dos bajan la espacial, 120 y 121); luego las
+    # dos mejores con 10 semillas, como la 83. Las 126 a 129 son las reglas de anuncios
+    # repetidos (A2 y A3) sobre la mejor, de 20_twin_rules.py.
+    Spec("boosting", "pt_core_coords", "by_type_level_q70_ridge_nocoords", drop_coords=True,
+         **R7),
+    Spec("boosting", "pt_core_coords", "by_type_level_q70_ridge_s10", n_seeds=10, **R7),
+    Spec("boosting", "pt_core_coords", "by_type_level_q70_ridge_nocoords_s10",
+         drop_coords=True, n_seeds=10, **R7),
+]
+# Pieza B: lineal y elastic net sin ningún término de lat ni lon (la 108 y la 109 con
+# SplineDesign(use_coords=False)); el elastic net con los hiperparámetros de la 104.
+ROUND_7B_START = 130
+ROUND_7B = [
+    Spec("linear", "ext_core_coords", "by_type_level_q70_ridge_oof_nogeo",
+         target="level", by_type=True, text_sources=("ridge",), recipe="q70_oof_linear_nogeo"),
+    Spec("elastic_net", "ext_core_coords", "by_type_level_q70_ridge_tuned_oof_nogeo",
+         target="level", by_type=True, text_sources=("ridge",),
+         recipe="q70_oof_elastic_net_nogeo",
+         params=moved_params("elastic_net_q70", [
+             ("regressor__quantileshift__regressor__", "regressor__regressor__elasticnet__"),
+             ("regressor__splinedesign__", "regressor__regressor__splinedesign__")])),
+]
+# Pieza C: balanceo hacia los inmuebles caros sobre la receta de la 83 (una semilla, como la
+# 82). Pesos crecientes con el decil de precio (el más caro pesa 2 y 4 veces el más barato)
+# y el 20 % más caro del nororiente repetido 2 y 3 veces, solo en cada ajuste. Cada
+# variante con cuantil 0,55, 0,60, 0,65 y 0,70: se escoge el que deje la media en test
+# más cerca de 880 M.
+ROUND_7C_START = 132
+BALANCE = [("pw2", dict(price_weight=2)), ("pw4", dict(price_weight=4)),
+           ("os2", dict(oversample=2)), ("os3", dict(oversample=3))]
+ROUND_7C = [Spec("boosting", "ext_core_coords", f"by_type_level_q{q}_ridge_{label}",
+                 text_sources=("ridge",), target="level", by_type=True,
+                 params=quantile_loss(q / 100), **extra)
+            for label, extra in BALANCE for q in (55, 60, 65, 70)]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -410,7 +459,10 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_3C, start=ROUND_3C_START)),
                   **dict(enumerate(ROUND_4, start=ROUND_4_START)),
                   **dict(enumerate(ROUND_5, start=ROUND_5_START)),
-                  **dict(enumerate(ROUND_6, start=ROUND_6_START))}
+                  **dict(enumerate(ROUND_6, start=ROUND_6_START)),
+                  **dict(enumerate(ROUND_7, start=ROUND_7_START)),
+                  **dict(enumerate(ROUND_7B, start=ROUND_7B_START)),
+                  **dict(enumerate(ROUND_7C, start=ROUND_7C_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -458,6 +510,8 @@ def build_spec_model(spec, params):
         model = SyntheticTail(model)
     if spec.price_weight:
         model = PriceWeighted(model, spec.price_weight)
+    if spec.oversample:
+        model = TailOversample(model, copies=spec.oversample)
     if spec.truncation:
         model = TruncationCorrection(model, upper_only=spec.upper_only)
     if spec.neighbors:
@@ -473,6 +527,8 @@ def build_spec_model(spec, params):
         model = NameLevel(model)
     if spec.drop_coords:
         model = DropColumns(model, tuple(COORD_FEATURES))
+    if spec.round_coords:
+        model = RoundColumns(model, tuple(COORD_FEATURES), spec.round_coords)
     if spec.text_sources:
         model = TextPredictors(model, [TEXT_SOURCES[key] for key in spec.text_sources])
     return model

@@ -15,8 +15,11 @@ import pandas as pd
 from sklearn.neighbors import BallTree
 
 from utils import (BOGOTA_BLOCKS_PATH, BOGOTA_LOTS_PATH, EARTH_RADIUS_M, ID_COL, LOT_FEATURES,
-                   OSM_POIS_PATH, PROCESSED_DIR, TARGET, distance_to_nearest_m, haversine_m,
-                   load_raw, test_similarity)
+                   OSM_POIS_PATH, PROCESSED_DIR, SAME_POINT_FEATURES, TARGET,
+                   distance_to_nearest_m, haversine_m, load_raw, test_similarity)
+
+# Ronda 7, A1: decimales de las coordenadas que definen "el mismo punto" (~1 m).
+POINT_DECIMALS = 5
 
 COUNT_RADIUS_M = 500
 # Categorías densas: además de la distancia, cuántas hay a 500 m (densidad de servicios).
@@ -405,6 +408,27 @@ def add_bogota_lots(built, max_distance_m=40):
             feats[column] = feats[ID_COL].map(lots[column]).where(near)
 
 
+def add_same_point_structure(built, decimals=POINT_DECIMALS):
+    """Área y baños del mismo edificio (ronda 7, pieza A1). Agrupa los anuncios de train y
+    test en el mismo punto (coordenadas redondeadas a 'decimals' decimales, ~1 m), con el
+    mismo número de alcobas y el mismo tipo. Al inmueble sin área (o sin baños) le asigna la
+    mediana del grupo. No usa ningún precio, así que juntar train y test no filtra nada."""
+    both = pd.concat(built.values(), keys=list(built))
+    keys = [both["lat"].round(decimals), both["lon"].round(decimals), both["bedrooms"],
+            both["is_house"]]
+    grouped = both.groupby(keys)
+    both["pt_count"] = grouped[ID_COL].transform("size")
+    both["pt_surface_median"] = grouped["surface"].transform("median")
+    both["pt_bathrooms_median"] = grouped["bathrooms"].transform("median")
+    both["surface_pt_imputed"] = (both["surface"].isna()
+                                  & both["pt_surface_median"].notna()).astype(int)
+    both["surface_pt"] = both["surface"].fillna(both["pt_surface_median"])
+    both["log_surface_pt"] = np.log(both["surface_pt"])
+    both["bathrooms_pt"] = both["bathrooms"].fillna(both["pt_bathrooms_median"])
+    for name in built:
+        built[name] = both.loc[name, built[name].columns.tolist() + SAME_POINT_FEATURES]
+
+
 def main():
     train, test = load_raw()
     pois = pd.read_csv(OSM_POIS_PATH) if OSM_POIS_PATH.exists() else None
@@ -428,6 +452,7 @@ def main():
         add_bogota_blocks(built)
     if BOGOTA_LOTS_PATH.exists():
         add_bogota_lots(built)
+    add_same_point_structure(built)
     # Parecido al test (no es predictor): sirve para ponderar el entrenamiento.
     built["train"]["test_similarity"] = test_similarity(built["train"], built["test"])
     for name, feats in built.items():

@@ -81,6 +81,10 @@ CORRIDOR_FEATURES = ["dist_carrera_7_m", "dist_cerros_m"]
 EXTERNAL_FEATURES = ["ext_stratum", "ext_land_value_m2"]
 # Catastro por lote (16_download_lots.py): área del lote, pisos y área construida del predio.
 LOT_FEATURES = ["ext_lot_area_m2", "ext_floors", "ext_built_area_m2"]
+# Ronda 7, A1: área y baños de los anuncios del mismo punto, alcobas y tipo, sin precios
+# (02_build_features.add_same_point_structure).
+SAME_POINT_FEATURES = ["pt_count", "pt_surface_median", "pt_bathrooms_median",
+                       "surface_pt_imputed", "surface_pt", "log_surface_pt", "bathrooms_pt"]
 
 
 def haversine_m(lat1, lon1, lat2, lon2):
@@ -169,6 +173,10 @@ def feature_sets(columns):
         # 'lot_core_coords' es 'ext_core_coords' con el lote y la construcción del predio.
         "lot_core_coords": ([c for c in full if c not in osm] + EXTERNAL_FEATURES
                             + [c for c in LOT_FEATURES if c in columns] + COORD_FEATURES),
+        # 'pt_core_coords' es 'ext_core_coords' con el área y los baños del mismo punto.
+        "pt_core_coords": ([c for c in full if c not in osm] + EXTERNAL_FEATURES
+                           + [c for c in SAME_POINT_FEATURES if c in columns]
+                           + COORD_FEATURES),
         # 'lux_core' es 'core' con el área ampliada y las señales de lujo.
         "lux_core_coords": ([EXTENDED_AREA.get(c, c) for c in full if c not in osm]
                             + LUXURY_FEATURES + COORD_FEATURES),
