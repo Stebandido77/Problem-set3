@@ -9,3 +9,4 @@ stores/external/
 stores/processed/oof_predictions.csv
 stores/processed/text_embeddings.npz
 stores/processed/text_cache/
+stores/processed/optuna_round5.db

@@ -15,7 +15,7 @@ from joblib import Memory
 from lightgbm import LGBMRegressor
 from scipy.special import ndtr, ndtri
 from scipy.stats import loguniform, randint, uniform
-from sklearn.base import BaseEstimator, RegressorMixin, clone
+from sklearn.base import BaseEstimator, RegressorMixin, TransformerMixin, clone
 from sklearn.compose import TransformedTargetRegressor
 from sklearn.decomposition import TruncatedSVD
 from sklearn.ensemble import RandomForestRegressor
@@ -26,7 +26,7 @@ from sklearn.model_selection import GroupKFold, KFold
 from sklearn.neighbors import BallTree, NearestNeighbors
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.preprocessing import PolynomialFeatures, SplineTransformer, StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
 from utils import (BEST_PARAMS_PATH, EARTH_RADIUS_M, EXTENDED_AREA, LUXURY_FEATURES, SEED,
@@ -876,19 +876,21 @@ class ResidualBoosting(RegressorMixin, BaseEstimator):
         return np.exp(self.linear_.predict(self._linear_X(X)) + self.boosting_.predict(X))
 
 
-def build_model(family, params=None, target="log", by_type=False, surface_col="surface"):
+def build_model(family, params=None, target="log", by_type=False, surface_col="surface",
+                recipe=""):
     """Devuelve el estimador de una familia.
 
     params: sobrescribe los hiperparámetros iniciales (rutas 'regressor__<paso>__<param>').
     target: 'log' (log del precio), 'level' (precio en pesos) o 'per_m2' (log del precio
             por m2 cuando hay área, con respaldo en log del precio).
-    by_type: si es True, ajusta un modelo aparte para apartamentos y otro para casas."""
+    by_type: si es True, ajusta un modelo aparte para apartamentos y otro para casas.
+    recipe: 'q70' es la versión de la ronda 5, que apunta al cuantil 0,70 (QUANTILE_RECIPES)."""
     params = params or {}
     if target == "per_m2":
         model = PricePerSquareMeter(build_model(family, params), build_model(family, params),
                                     surface_col)
     else:
-        steps = family_pipeline(family)
+        steps = QUANTILE_RECIPES[family]() if recipe == "q70" else family_pipeline(family)
         model = log_target(steps) if target == "log" else level_target(steps)
         model.set_params(**params)
     return ByPropertyType(model) if by_type else model
@@ -954,6 +956,142 @@ def family_pipeline(family):
     else:
         raise ValueError(f"Familia desconocida: {family}")
     return steps
+
+
+# --- Ronda 5: la receta del boosting (cuantil 0,70 en niveles) en las demás familias ---
+RECIPE_QUANTILE = 0.70
+# Calidad del inmueble que cambia el precio por m2: acabados del texto, estrato de la
+# manzana, valor del terreno y el ridge del texto. Entran multiplicadas por el área.
+QUALITY_COLUMNS = ["txt_remodeled", "txt_fireplace", "txt_penthouse", "txt_duplex",
+                   "txt_terrace", "txt_view", "txt_stratum", "ext_stratum",
+                   "ext_land_value_m2", "txt_ridge"]
+
+
+class SplineDesign(TransformerMixin, BaseEstimator):
+    """Base no lineal para la regresión lineal y el elastic net: los predictores con su
+    indicador de faltante, splines del log del área, splines de latitud y de longitud con su
+    interacción lineal (lat x lon), esos splines multiplicados por el área (precio por m2
+    que cambia con la ubicación) y el área por cada predictor de calidad (QUALITY_COLUMNS).
+    Medianas, nudos y topes salen solo de las filas de ajuste.
+
+    Con tensor=True la ubicación entra como producto tensorial de los splines (una
+    superficie libre). Se probó en la ronda 5 y se descartó: en la validación espacial los
+    bloques sin datos de ajuste reciben coeficientes arbitrarios y el MAE sube de 158 a
+    246 M en la lineal."""
+
+    def __init__(self, n_knots_geo=6, n_knots_area=6, area_col="surface",
+                 area_by_location=True, tensor=False):
+        self.n_knots_geo = n_knots_geo
+        self.n_knots_area = n_knots_area
+        self.area_col = area_col
+        self.area_by_location = area_by_location
+        self.tensor = tensor
+
+    def fit(self, X, y=None):
+        self.medians_ = X.median()
+        self.missing_ = [c for c in X.columns if X[c].isna().any()]
+        self.quality_ = [c for c in QUALITY_COLUMNS if c in X.columns]
+        area = X[self.area_col].fillna(self.medians_[self.area_col])
+        self.area_range_ = np.quantile(area, [0.005, 0.995])
+        filled = X.fillna(self.medians_)
+        self.lat_ = SplineTransformer(self.n_knots_geo).fit(filled[["lat"]])
+        self.lon_ = SplineTransformer(self.n_knots_geo).fit(filled[["lon"]])
+        self.area_spline_ = SplineTransformer(self.n_knots_area).fit(
+            np.log(self._area(filled))[:, None])
+        self.scaler_ = StandardScaler().fit(self._design(X))
+        return self
+
+    def _area(self, filled):
+        return np.clip(filled[self.area_col].to_numpy(float), *self.area_range_)
+
+    def _design(self, X):
+        filled = X.fillna(self.medians_)
+        area = self._area(filled)
+        lat, lon = self.lat_.transform(filled[["lat"]]), self.lon_.transform(filled[["lon"]])
+        surface = ((lat[:, :, None] * lon[:, None, :]).reshape(len(X), -1) if self.tensor
+                   else np.hstack([lat, lon, (filled["lat"] * filled["lon"]).to_numpy()[:, None]]))
+        blocks = [filled.to_numpy(float), X[self.missing_].isna().to_numpy(float),
+                  self.area_spline_.transform(np.log(area)[:, None]), surface,
+                  area[:, None] * filled[self.quality_].to_numpy(float)]
+        if self.area_by_location:
+            blocks.append(area[:, None] * surface)
+        return np.hstack(blocks)
+
+    def transform(self, X):
+        return self.scaler_.transform(self._design(X))
+
+
+class QuantileShift(RegressorMixin, BaseEstimator):
+    """Ajusta 'regressor' sobre el precio en millones y le suma el percentil 'quantile' de
+    sus residuos en las filas de ajuste: lleva una predicción de la media al cuantil 0,70.
+    El corrimiento se calcula en cada ajuste (dentro de cada partición y de cada tipo), nunca
+    con validación ni test. Los residuos son de la misma muestra: con modelos lineales casi
+    no difieren de los de fuera de muestra. Como un modelo lineal en niveles puede
+    extrapolar a precios negativos, la predicción se recorta al rango de precios del ajuste."""
+
+    def __init__(self, regressor, quantile=RECIPE_QUANTILE, scale=1e6):
+        self.regressor = regressor
+        self.quantile = quantile
+        self.scale = scale
+
+    def fit(self, X, y):
+        y = np.asarray(y, dtype=float) / self.scale
+        self.regressor_ = clone(self.regressor).fit(X, y)
+        self.shift_ = float(np.quantile(y - self.regressor_.predict(X), self.quantile))
+        self.range_ = (y.min(), y.max())
+        return self
+
+    def predict(self, X):
+        return np.clip(self.regressor_.predict(X) + self.shift_, *self.range_) * self.scale
+
+
+class LeafQuantileTree(RegressorMixin, BaseEstimator):
+    """Árbol de regresión sobre el precio en niveles que predice, en cada hoja, el percentil
+    'quantile' de los precios de entrenamiento que cayeron en ella. La poda 'ccp_alpha' está
+    en millones al cuadrado (el árbol se ajusta con el precio en millones)."""
+
+    def __init__(self, max_depth=12, min_samples_leaf=20, ccp_alpha=0.0,
+                 quantile=RECIPE_QUANTILE, random_state=SEED):
+        self.max_depth = max_depth
+        self.min_samples_leaf = min_samples_leaf
+        self.ccp_alpha = ccp_alpha
+        self.quantile = quantile
+        self.random_state = random_state
+
+    def fit(self, X, y):
+        y = np.asarray(y, dtype=float)
+        self.tree_ = DecisionTreeRegressor(
+            max_depth=self.max_depth, min_samples_leaf=self.min_samples_leaf,
+            ccp_alpha=self.ccp_alpha, random_state=self.random_state).fit(X, y / 1e6)
+        self.leaf_values_ = pd.Series(y).groupby(self.tree_.apply(X)).quantile(self.quantile)
+        return self
+
+    def predict(self, X):
+        return self.leaf_values_.reindex(self.tree_.apply(X)).to_numpy()
+
+
+def quantile_forest():
+    """Bosque de regresión cuantílica (Meinshausen, 2006): cada árbol guarda los precios de
+    entrenamiento de sus hojas y la predicción es el percentil 70 de esa distribución."""
+    from quantile_forest import RandomForestQuantileRegressor
+    return make_pipeline(
+        impute(),
+        RandomForestQuantileRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.4,
+                                      default_quantiles=RECIPE_QUANTILE, n_jobs=-1,
+                                      random_state=SEED))
+
+
+QUANTILE_RECIPES = {
+    "random_forest": quantile_forest,
+    "elastic_net": lambda: make_pipeline(SplineDesign(), QuantileShift(
+        ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=2000, tol=1e-3, selection="random",
+                   random_state=SEED))),
+    # Mínimos cuadrados sobre la misma base con la corrección por residuos. La regresión
+    # cuantílica (QuantileRegressor con HiGHS) tardó 6 minutos por ajuste y, sin
+    # regularización, dio una media negativa en el holdout: se descartó.
+    "linear": lambda: make_pipeline(SplineDesign(), QuantileShift(LinearRegression())),
+    "cart": lambda: make_pipeline(impute(), LeafQuantileTree()),
+}
 
 
 # Espacios de búsqueda aleatoria. El prefijo es la ruta del parámetro dentro del pipeline.

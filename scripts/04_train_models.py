@@ -78,6 +78,7 @@ class Spec:
     text_sources: tuple = ()     # fuentes de TEXT_SOURCES que alimentan al modelo
                                  # (TextPredictors, ronda 4)
     tune_key: str = ""           # clave de best_params.json si no es '<familia>_<conjunto>'
+    recipe: str = ""             # 'q70': versión cuantílica de la ronda 5 (QUANTILE_RECIPES)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -306,6 +307,26 @@ ROUND_4 = [
          text_sources=("ridge", "ridge_type", "net"), n_seeds=10, tuned=True,
          tune_key="optuna_tpe", **Q70),
 ]
+# Ronda 5: la receta de la 83 en las demás familias, para compararlas en igualdad de
+# condiciones. Un modelo por tipo, estrato y valor del terreno, el ridge del texto fuera de
+# muestra (el mismo txt_ridge de la 83) y el precio en niveles llevado al cuantil 0,70 con
+# lo que cada familia permite (models.QUANTILE_RECIPES).
+ROUND_5_START = 99
+R5 = dict(target="level", by_type=True, text_sources=("ridge",), recipe="q70")
+ROUND_5 = [
+    # Valores por defecto de cada receta: el punto de partida de 17_tune_families.py.
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge", **R5),
+    Spec("elastic_net", "ext_core_coords", "splines_by_type_level_q70_ridge", **R5),
+    Spec("linear", "ext_core_coords", "splines_by_type_level_q70_ridge", **R5),
+    Spec("cart", "ext_core_coords", "by_type_level_q70_ridge", **R5),
+    # Sintonizadas con 17_tune_families.py (claves '<familia>_q70').
+    Spec("random_forest", "ext_core_coords", "by_type_level_q70_ridge_tuned", tuned=True,
+         tune_key="random_forest_q70", **R5),
+    Spec("elastic_net", "ext_core_coords", "splines_by_type_level_q70_ridge_tuned",
+         tuned=True, tune_key="elastic_net_q70", **R5),
+    Spec("cart", "ext_core_coords", "by_type_level_q70_ridge_tuned", tuned=True,
+         tune_key="cart_q70", **R5),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -314,7 +335,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_3, start=ROUND_3_START)),
                   **dict(enumerate(ROUND_3B, start=ROUND_3B_START)),
                   **dict(enumerate(ROUND_3C, start=ROUND_3C_START)),
-                  **dict(enumerate(ROUND_4, start=ROUND_4_START))}
+                  **dict(enumerate(ROUND_4, start=ROUND_4_START)),
+                  **dict(enumerate(ROUND_5, start=ROUND_5_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -352,7 +374,8 @@ def build_spec_model(spec, params):
         model = FocusFineTune(build_model(spec.family, params, spec.target, False, surface_col))
         model = ByPropertyType(model) if spec.by_type else model
     else:
-        model = build_model(spec.family, params, spec.target, spec.by_type, surface_col)
+        model = build_model(spec.family, params, spec.target, spec.by_type, surface_col,
+                            spec.recipe)
     if spec.n_seeds > 1:
         model = SeedAverage(model, spec.n_seeds)
     if spec.impute_area:
