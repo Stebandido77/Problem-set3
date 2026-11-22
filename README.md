@@ -39,7 +39,10 @@ destruye capital?
 │   ├── 23_error_anatomy.py    error de la 83 y la 127 por segmento y los 50 peores (ronda 8)
 │   ├── 24_assumptions.py      nivel por segmento, apilamiento y tope de precio (ronda 8)
 │   ├── 25_criteria_vs_kaggle.py  ponderado y espacial frente al puntaje público (ronda 8)
-│   └── 27_net_table.py        redes y mezclas contra la 148 y la 152 (ronda 9)
+│   ├── 27_net_table.py        redes y mezclas contra la 148 y la 152 (ronda 9)
+│   ├── 28_tune_knn.py         rejilla del kNN cuantílico con validación espacial (ronda 10)
+│   ├── 29_round10_table.py    monotonía, hojas lineales, kNN y mezclas (ronda 10)
+│   └── 30_probe_top.py        sondeo: el 5 % más alto de un envío por un factor (no es modelo)
 ├── stores/
 │   ├── raw/                   datos de Kaggle (train, test, plantilla de envío)
 │   ├── external/              caché de descargas de Bogotá (no se versiona)
@@ -99,6 +102,15 @@ python 17_tune_families.py --spec 169 --n-trials 20 --objective spatial   # ~17 
 python 04_train_models.py --specs 171 --schemes northeast spatial
 python 06_ensemble.py --number 172 --how weighted --weights 0.7 0.3 --models     127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix     171_quantile_net_pt_core_coords_by_type_q70_ridge_nocoords_tuned   # y 173-176
 python 27_net_table.py --models 148 168 169 170 171 152 172 173 174 175 176
+# Ronda 10 (monotonía, hojas lineales y kNN), en este orden:
+python 04_train_models.py --specs 177 178 179 180 --schemes spatial northeast   # ~65 min
+python 20_twin_rules.py --model 177_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10 --rules mix --numbers 181   # y 178-180 -> 182-184
+python 28_tune_knn.py                     # ~3 min
+python 04_train_models.py --specs 185 --schemes spatial northeast
+python 06_ensemble.py --number 186 --how weighted --weights 0.7 0.3 --models     181_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10_twin_mix     148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords   # 187 y 188 suman la 185
+python 30_probe_top.py --model 152_ensemble_w70_30_2 --number 189 --share 0.05 --factor 1.15
+python 07_results_table.py
+python 29_round10_table.py --models 127 152 177 178 179 180 181 182 183 184 185 186 187 188 189
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -298,7 +310,20 @@ Cifras en millones de pesos.
 | `174_ensemble_w50_50_2` | – | – | 127.4 | – | 153.2 | 151.5 | -61.4 | 48% |
 | `175_ensemble_w60_20_20_3` | – | – | 127.1 | – | 153.3 | 151.5 | -59.5 | 49% |
 | `176_ensemble_w50_25_25_3` | – | – | 127.8 | – | 152.6 | 150.9 | -59.0 | 48% |
+| `177_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10` | 42 | – | 123.8 | – | 157.9 | 156.0 | -69.7 | 46% |
+| `178_boosting_pt_core_coords_by_type_pinball_mono_ridge_nocoords_s10` | 42 | – | 127.4 | – | 154.4 | 152.8 | -61.5 | 48% |
+| `179_boosting_pt_core_coords_by_type_pinball_mono_txt_ridge_nocoords_s10` | 42 | – | 133.0 | – | 154.7 | 153.3 | -58.2 | 48% |
 | `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | 174.9 | 173.3 | -116.2 | 35% |
+| `180_boosting_pt_core_coords_by_type_pinball_linear_ridge_nocoords_s5` | 42 | – | 124.0 | – | 157.5 | 155.7 | -68.7 | 47% |
+| `181_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10_twin_mix` | – | – | 123.7 | – | 157.7 | 155.8 | -70.2 | 46% |
+| `182_boosting_pt_core_coords_by_type_pinball_mono_ridge_nocoords_s10_twin_mix` | – | – | 127.3 | – | 154.2 | 152.6 | -61.9 | 48% |
+| `183_boosting_pt_core_coords_by_type_pinball_mono_txt_ridge_nocoords_s10_twin_mix` | – | – | 132.9 | – | 154.5 | 153.1 | -58.6 | 48% |
+| `184_boosting_pt_core_coords_by_type_pinball_linear_ridge_nocoords_s5_twin_mix` | – | – | 123.9 | – | 157.4 | 155.5 | -69.2 | 46% |
+| `185_knn_pt_core_coords_by_type_q70_tuned` | 42 | – | 169.5 | – | 179.8 | 178.0 | -71.6 | 47% |
+| `186_ensemble_w70_30_2` | – | – | 123.9 | – | 153.2 | 151.5 | -63.2 | 48% |
+| `187_ensemble_w60_25_15_3` | – | – | 125.7 | – | 154.8 | 153.0 | -64.6 | 48% |
+| `188_ensemble_w65_25_10_3` | – | – | 124.7 | – | 154.3 | 152.6 | -64.5 | 48% |
+| `189_probe_ensemble_w70_30_2_top5_x115` | – | 103.0 | 132.7 | – | 148.3 | 146.6 | -49.8 | 50% |
 | `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | 189.9 | 188.3 | -134.0 | 34% |
 | `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 144.1 | 174.5 | 173.2 | 171.4 | -115.9 | 35% |
 | `20_random_forest_rich_by_type_per_m2` | 70 | 89.7 | 150.4 | 177.3 | 186.1 | 184.4 | -129.0 | 35% |
@@ -796,6 +821,52 @@ Ninguna mezcla supera a la 152 en la espacial por más de 2 M. La red sintonizad
 sola, pero se parece más al boosting (correlación de 0,968 frente a 0,962) y la mezcla
 gana poco. La segunda red sí es distinta (0,937 con el 127), pero es peor sola, y en la
 mezcla a tres no mejora lo que logra la 172.
+
+### Ronda 10: monotonía, hojas lineales y kNN
+
+Criterio: validación espacial y después el ponderado; menos de 2 M es ruido. Cifras de
+`views/round10_table.csv` (`29_round10_table.py`); ninguna fila tiene la validación
+aleatoria. Las filas 181 a 184 son la 177 a la 180 con la regla `mix` de gemelos, como la
+127 lo es de la 125.
+
+| Fila | Cambio sobre la receta del 127 | Espacial | Ponderado | Media test | Máx. test | > 1.650 M |
+|---|---|---:|---:|---:|---:|---:|
+| 127 | referencia | 127,0 | 155,5 | 878 | 1.730 | 7 |
+| 181 | pinball propia, sin restricciones (control) | 123,7 | 155,8 | 862 | 1.747 | 10 |
+| 182 | pinball, monótona en área, baños, parqueaderos, estrato y terreno | 127,3 | 152,6 | 871 | 1.878 | 36 |
+| 183 | la 182 también monótona en el ridge del texto | 132,9 | 153,1 | 878 | 1.921 | 107 |
+| 184 | pinball con hojas lineales (lambda 100, 5 semillas) | 123,9 | 155,5 | 859 | 1.783 | 8 |
+| 185 | kNN por tipo, percentil 70 de 40 vecinos† | 169,5† | 178,0 | 789 | 1.550 | 0 |
+
+- **Por qué una pinball propia:** LightGBM no admite restricciones monótonas con su pérdida
+  cuantílica. La 181 aísla el cambio de pérdida: baja la espacial 3,3 M, pero casi todo es
+  nivel (sesgo espacial de +35 a +15, media en test de 878 a 862, sesgo nororiental de −62 a
+  −70), y el ponderado no se mueve.
+- **Monotonía:** frente a su control, gana 3,3 M en el ponderado y pierde 3,6 en la
+  espacial. Con el texto también restringido pierde 9 M en la espacial.
+- **Hojas lineales:** con la pérdida cuantílica de LightGBM no sirven (209 M en el
+  nororiente con cualquier lambda y precios negativos); con la pinball propia empatan con el
+  control. Ninguna predicción del test es absurda (mínimo 285 M), y no se recortó nada.
+- **kNN:** † rejilla de k y pesos con la espacial como objetivo (optimista), y el óptimo
+  quedó en el borde (k = 40, peso de ubicación 0,1). Su correlación en test es de 0,854 con
+  la 181, 0,857 con la 127 y 0,848 con la red 148.
+
+Mezclas con pesos fijos, contra la 152 (127 al 70 % y red 148 al 30 %):
+
+| Fila | Pesos 181 / 148 / 185 | Espacial | Ponderado | Media test | Δ esp. 152 | Δ pond. 152 |
+|---|---|---:|---:|---:|---:|---:|
+| 152 | (127) 70 / 30 / – | 127,6 | 151,7 | 877 | | |
+| 186 | 70 / 30 / – | 123,9 | 151,5 | 866 | −3,7 | −0,3 |
+| 187 | 60 / 25 / 15 | 125,7 | 153,0 | 854 | −1,9 | +1,3 |
+| 188 | 65 / 25 / 10 | 124,7 | 152,6 | 858 | −2,9 | +0,8 |
+
+La 186 supera a la 152 en la espacial por más de 2 M y empata en el ponderado, pero la
+mejora viene de bajar el nivel, como la red 171 en la ronda 9. El kNN no aporta a la mezcla.
+
+**Sondeo, no es un modelo:** `189_probe_ensemble_w70_30_2_top5_x115` multiplica por 1,15 el
+5 % más alto de las predicciones de la 152 (515 pasan de 1.650 M). Baja el ponderado de
+151,7 a 146,6 y sube la espacial de 127,6 a 132,7: sirve para medir en Kaggle si el tramo
+caro está subpredicho.
 
 ### Calibración de nivel (no es un modelo)
 
