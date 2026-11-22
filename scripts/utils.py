@@ -95,6 +95,13 @@ def haversine_m(lat1, lon1, lat2, lon2):
     return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
 
 
+def test_center():
+    """Mediana de lat y lon del test: el centro de Chapinero para los modelos locales de la
+    ronda 8. Solo usa coordenadas, no precios."""
+    test = pd.read_csv(PROCESSED_DIR / "test_features.csv", usecols=["lat", "lon"])
+    return float(test["lat"].median()), float(test["lon"].median())
+
+
 def load_raw():
     """Lee train y test tal como vienen de Kaggle."""
     train = pd.read_csv(RAW_DIR / "train.csv")

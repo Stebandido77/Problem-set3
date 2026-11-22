@@ -28,15 +28,16 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 from models import (FAMILIES, ByPropertyType, DropColumns, EmbeddingNet, EmbeddingSVD,
-                    FocusFineTune, ImputedArea, NameLevel, NeighborhoodLevel, PriceWeighted,
+                    FocusFineTune, ImputedArea, LocalFit, NameLevel, NeighborhoodLevel, PriceWeighted,
                     QuantileNet,
                     ResidualBoosting, RidgeText, RoundColumns, TailOversample, SameBuilding, SeedAverage, SyntheticTail,
-                    TextFeatures, TextNet, TextPredictors, TruncationCorrection, build_model,
+                    TextFeatures, TextNet, TextPredictors, TrimPricePerM2, TruncationCorrection,
+                    TwinFilter, build_model,
                     fit_model, load_best_params, northeast_building_groups)
 from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, add_embeddings,
                    chapinero_holdout, error_summary, feature_sets, load_processed,
                    northeast_holdout, random_cv, random_twin_splits, save_submission,
-                   similarity_weights, spatial_cv_splits, weighted_mae)
+                   similarity_weights, spatial_cv_splits, test_center, weighted_mae)
 
 
 # Esquemas de validación: nombre -> función (train, test) -> lista de particiones.
@@ -84,6 +85,10 @@ class Spec:
     drop_coords: bool = False    # el modelo no ve lat ni lon (sí el texto, para los gemelos)
     round_coords: int = 0        # decimales a los que se redondean lat y lon (RoundColumns)
     oversample: int = 0          # copias del 20 % más caro del nororiente (TailOversample)
+    local: tuple = ()            # ('radius', metros) o ('northeast_high', 0) (LocalFit)
+    twins: str = ""              # 'drop' o 'weight' para los anuncios repetidos (TwinFilter)
+    trim: bool = False           # sin precios por m2 fuera de p1-p99 del tipo (TrimPricePerM2)
+    surface: str = ""            # columna de área si no es la del conjunto ('surface_pt')
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -463,6 +468,30 @@ ROUND_7E = [
     Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_tfidfnet",
          text_sources=("ridge", "tfidf_ga"), **Q70),
 ]
+# Ronda 8: revisión de supuestos sobre la receta de la 82 (la 83 con una semilla), una idea
+# a la vez. Criterio: holdout ponderado y validación espacial; menos de 2 M es ruido. Los
+# números 150 a 153 son las mezclas de la ronda 7 (06_ensemble.py).
+ROUND_8_START = 154
+ROUND_8 = [
+    # a. Otros cuantiles: insumo de la corrección de nivel por segmento (24_assumptions.py).
+    *[Spec("boosting", "ext_core_coords", f"by_type_level_q{q}_ridge", text_sources=("ridge",),
+           target="level", by_type=True, params=quantile_loss(q / 100)) for q in (60, 65, 75, 80)],
+    # b. Modelo local: apartamentos de estrato alto del nororiente y radios alrededor del
+    # centro del test (el texto se sigue ajustando con todo).
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_local_ne",
+         local=("northeast_high", 0), **R7),
+    *[Spec("boosting", "ext_core_coords", f"by_type_level_q70_ridge_local_{km}km",
+           local=("radius", km * 1000), **R7) for km in (3, 5, 8)],
+    # c. Sin gemelos (uno por grupo) y con los gemelos a peso 1 / tamaño del grupo.
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_notwins", twins="drop", **R7),
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_twinweight", twins="weight",
+         **R7),
+    # d. Sin precios por m2 fuera de los percentiles 1 y 99 de su tipo.
+    Spec("boosting", "ext_core_coords", "by_type_level_q70_ridge_trim", trim=True, **R7),
+    # e. Precio por m2 como objetivo con el área recuperada del mismo punto (A1, ronda 7).
+    Spec("boosting", "pt_core_coords", "by_type_per_m2_q70_ridge", text_sources=("ridge",),
+         target="per_m2", by_type=True, surface="surface_pt", params=quantile_loss(0.70)),
+]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -478,7 +507,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_7B, start=ROUND_7B_START)),
                   **dict(enumerate(ROUND_7C, start=ROUND_7C_START)),
                   **dict(enumerate(ROUND_7D, start=ROUND_7D_START)),
-                  **dict(enumerate(ROUND_7E, start=ROUND_7E_START))}
+                  **dict(enumerate(ROUND_7E, start=ROUND_7E_START)),
+                  **dict(enumerate(ROUND_8, start=ROUND_8_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -512,7 +542,8 @@ def build_spec_model(spec, params):
     """Modelo de una especificación con sus envoltorios (vecinos, pesos, sintéticos)."""
     params = {**params, **dict(spec.params)}
     # Los conjuntos 'lux' usan el área ampliada con más patrones de texto.
-    surface_col = "surface_ext" if spec.features.startswith("lux") else "surface"
+    surface_col = spec.surface or ("surface_ext" if spec.features.startswith("lux")
+                                   else "surface")
     if spec.family == "en_boosting":
         model = ResidualBoosting(params, luxury=spec.features.startswith("lux"))
     elif spec.family == "quantile_net":
@@ -536,6 +567,9 @@ def build_spec_model(spec, params):
         model = TailOversample(model, copies=spec.oversample)
     if spec.truncation:
         model = TruncationCorrection(model, upper_only=spec.upper_only)
+    if spec.local:
+        rule, radius = spec.local
+        model = LocalFit(model, rule=rule, radius_m=radius, center=test_center())
     if spec.neighbors:
         model = NeighborhoodLevel(model, drop_coords="coords" not in spec.features,
                                   surface_col=surface_col)
@@ -553,6 +587,10 @@ def build_spec_model(spec, params):
         model = RoundColumns(model, tuple(COORD_FEATURES), spec.round_coords)
     if spec.text_sources:
         model = TextPredictors(model, [TEXT_SOURCES[key] for key in spec.text_sources])
+    if spec.trim:
+        model = TrimPricePerM2(model, surface_col=surface_col)
+    if spec.twins:
+        model = TwinFilter(model, spec.twins)
     return model
 
 

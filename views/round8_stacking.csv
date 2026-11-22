@@ -1,0 +1,11 @@
+esquema,modelo,mae,pesos,mae_espacial,pesos_test,test_media,test_p95,test_max,envio
+weighted,83 sola,154.8373566443444,,,,,,,
+weighted,mezcla 70/30,151.4556607133081,,,,,,,
+weighted,lineal_mediana (dentro del esquema),146.07728649426156,"boosting 0.15, net 1.07, forest 0.01, intercepto -142 M | boosting 0.24, net 1.07, forest -0.08, intercepto -143 M | boosting 0.09, net 0.79, forest 0.27, intercepto -111 M | boosting -0.00, net 1.17, forest 0.06, intercepto -133 M | boosting 0.14, net 1.12, forest -0.04, intercepto -128 M",,,,,,
+weighted,lgbm_l1 (dentro del esquema),140.24021489793742, |  |  |  | ,,,,,,
+spatial,83 sola,131.48392199215144,,,,,,,
+spatial,mezcla 70/30,131.11371559940267,,,,,,,
+spatial,lineal_mediana (dentro del esquema),119.54070361008542,"boosting 0.30, net 0.37, forest 0.20, intercepto 17 M | boosting 0.43, net 0.34, forest 0.15, intercepto -4 M | boosting 0.37, net 0.35, forest 0.19, intercepto 2 M | boosting 0.39, net 0.38, forest 0.12, intercepto -1 M | boosting 0.36, net 0.39, forest 0.15, intercepto 1 M",,,,,,
+spatial,lgbm_l1 (dentro del esquema),120.1842893893908, |  |  |  | ,,,,,,
+espacial -> ponderado,lineal_mediana,169.9306598664181,"boosting 0.36, net 0.37, forest 0.15, intercepto 8 M",119.54070361008542,"boosting 0.38, net 0.36, forest 0.16, intercepto 2 M",787.8494855510885,1304.8684181521307,1612.432815748749,166_stack_lineal_mediana_3.csv
+espacial -> ponderado,lgbm_l1,177.98914418976545,,120.1842893893908,,799.9381446511273,1371.447499756589,1502.257886389549,167_stack_lgbm_l1_3.csv

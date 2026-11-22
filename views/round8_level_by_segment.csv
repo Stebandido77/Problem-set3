@@ -1,0 +1,23 @@
+esquema,segmentacion,mae,segmento,cuantil
+weighted,global,154.9361628333092,,
+weighted,tercil,153.7384797753086,,
+weighted,estrato,157.1263042036154,,
+spatial,global,126.0783264357559,,
+spatial,tercil,126.0783264357559,,
+spatial,estrato,125.87907085626604,,
+spatial,estrato,,1-4,"0.60, 0.60, 0.60, 0.60, 0.60"
+spatial,estrato,,5,"0.60, 0.60, 0.60, 0.60, 0.65"
+spatial,estrato,,6,"0.65, 0.65, 0.65, 0.65"
+spatial,estrato,,sin dato,"0.60, 0.60, 0.60, 0.60, 0.60"
+spatial,global,,todo,"0.60, 0.60, 0.60, 0.60, 0.60"
+spatial,tercil,,alto,"0.60, 0.60, 0.60, 0.60, 0.60"
+spatial,tercil,,bajo,"0.60, 0.60, 0.60, 0.60, 0.60"
+spatial,tercil,,medio,"0.60, 0.60, 0.60, 0.60, 0.60"
+weighted,estrato,,1-4,"0.65, 0.65, 0.65, 0.65, 0.65"
+weighted,estrato,,5,"0.60, 0.70, 0.70, 0.70"
+weighted,estrato,,6,"0.60, 0.60, 0.60, 0.75"
+weighted,estrato,,sin dato,"0.60, 0.65, 0.65, 0.65, 0.65"
+weighted,global,,todo,"0.65, 0.65, 0.65, 0.65, 0.65"
+weighted,tercil,,alto,"0.80, 0.80, 0.80, 0.80, 0.80"
+weighted,tercil,,bajo,"0.60, 0.60, 0.60, 0.60, 0.65"
+weighted,tercil,,medio,"0.65, 0.65, 0.65, 0.65, 0.65"

@@ -30,8 +30,8 @@ from sklearn.preprocessing import PolynomialFeatures, SplineTransformer, Standar
 from sklearn.tree import DecisionTreeRegressor
 
 from utils import (BEST_PARAMS_PATH, EARTH_RADIUS_M, EXTENDED_AREA, LUXURY_FEATURES, SEED,
-                   TEXT_CACHE_DIR, TWIN_COLUMNS, embedding_columns, northeast_holdout,
-                   transductive_reference, twin_groups)
+                   TEXT_CACHE_DIR, TWIN_COLUMNS, embedding_columns, haversine_m,
+                   northeast_holdout, transductive_reference, twin_groups)
 
 # Caché en disco de los predictores de texto ajustados (no se versiona; se puede borrar).
 TEXT_CACHE = Memory(TEXT_CACHE_DIR, verbose=0)
@@ -903,6 +903,99 @@ class TailOversample(RegressorMixin, BaseEstimator):
         w = None if sample_weight is None else np.asarray(sample_weight)[rows]
         self.model_ = fit_model(clone(self.model), X.iloc[rows].reset_index(drop=True),
                                 y[rows], w)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X)
+
+
+class LocalFit(RegressorMixin, BaseEstimator):
+    """Entrena solo con una parte del ajuste (ronda 8, pieza b), sin mirar precios:
+    - 'radius': las filas a menos de 'radius_m' de 'center' (lat, lon), el centro del test;
+    - 'northeast_high': los apartamentos de estrato 5 o 6 a menos de 4 km de la Zona T, más
+      todas las casas, para que el modelo de casas de ByPropertyType tenga datos.
+    Si a un tipo le quedan menos de 'min_rows' filas, ese tipo usa todas las suyas."""
+
+    NORTHEAST_M = 4000      # distancia máxima a la Zona T en 'northeast_high'
+    HIGH_STRATA = 5         # estrato mínimo de los apartamentos en 'northeast_high'
+
+    def __init__(self, model, rule="radius", radius_m=5000, center=None, min_rows=300):
+        self.model = model
+        self.rule = rule
+        self.radius_m = radius_m
+        self.center = center
+        self.min_rows = min_rows
+
+    def subset(self, X):
+        apartment = (X["is_house"] == 0).to_numpy()
+        if self.rule == "northeast_high":
+            keep = (~apartment | ((X["ext_stratum"] >= self.HIGH_STRATA)
+                                  & (X["dist_zona_t_m"] <= self.NORTHEAST_M)).to_numpy())
+        else:
+            keep = haversine_m(X["lat"], X["lon"], *self.center).to_numpy() <= self.radius_m
+        for kind in (apartment, ~apartment):
+            if (keep & kind).sum() < self.min_rows:
+                keep |= kind
+        return keep
+
+    def fit(self, X, y, sample_weight=None):
+        keep = self.subset(X)
+        self.n_fit_ = int(keep.sum())
+        w = None if sample_weight is None else np.asarray(sample_weight)[keep]
+        self.model_ = fit_model(clone(self.model), X[keep], np.asarray(y, dtype=float)[keep], w)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X)
+
+
+class TwinFilter(RegressorMixin, BaseEstimator):
+    """Anuncios repetidos en el ajuste (ronda 8, pieza c), con los gemelos de
+    utils.twin_groups: 'drop' deja una sola fila por grupo y 'weight' le da a cada fila un
+    peso de 1 / tamaño del grupo, para que cada inmueble cuente una vez. No usa precios."""
+
+    def __init__(self, model, mode="drop"):
+        self.model = model
+        self.mode = mode
+
+    def fit(self, X, y, sample_weight=None):
+        groups = twin_groups(X.reset_index(drop=True))
+        y = np.asarray(y, dtype=float)
+        w = np.ones(len(y)) if sample_weight is None else np.asarray(sample_weight, float)
+        if self.mode == "drop":
+            keep = ~pd.Series(groups).duplicated().to_numpy()
+            self.model_ = fit_model(clone(self.model), X[keep], y[keep],
+                                    None if sample_weight is None else w[keep])
+        else:
+            size = pd.Series(groups).map(pd.Series(groups).value_counts()).to_numpy()
+            self.model_ = fit_model(clone(self.model), X, y, w / size)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X)
+
+
+class TrimPricePerM2(RegressorMixin, BaseEstimator):
+    """Quita del ajuste los anuncios con precio por m2 fuera de los percentiles 'low' y
+    'high' de su tipo (ronda 8, pieza d). Los percentiles salen solo de las filas de ajuste
+    con área; las filas sin área se quedan."""
+
+    def __init__(self, model, low=0.01, high=0.99, surface_col="surface"):
+        self.model = model
+        self.low = low
+        self.high = high
+        self.surface_col = surface_col
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        per_m2 = pd.Series(y / X[self.surface_col].to_numpy(), index=X.index)
+        kind = X["is_house"]
+        lower = per_m2.groupby(kind).transform(lambda s: s.quantile(self.low))
+        upper = per_m2.groupby(kind).transform(lambda s: s.quantile(self.high))
+        keep = (per_m2.isna() | per_m2.between(lower, upper)).to_numpy()
+        self.n_dropped_ = int((~keep).sum())
+        w = None if sample_weight is None else np.asarray(sample_weight)[keep]
+        self.model_ = fit_model(clone(self.model), X[keep], y[keep], w)
         return self
 
     def predict(self, X):

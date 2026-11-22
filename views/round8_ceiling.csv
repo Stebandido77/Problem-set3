@@ -1,0 +1,9 @@
+medida,valor,detalle
+test a menos de 5 % del tope (83),88.0,de 10286; máximo 1707 M
+test a menos de 5 % del tope (127),66.0,de 10286; máximo 1730 M
+test a menos de 5 % del tope (152),138.0,de 10286; máximo 1772 M
+train junto al test con precio de 1.567 M o más,0.017201166180758017,118 de 6860 filas validadas del holdout
+"82, holdout con tope de 1.000 M: ponderado",155.4150967145787,17.9% de la validación pasa de 1.000 M
+"82, holdout sin tope (ajuste hasta 1.650 M): ponderado",138.6197982415412,mismas filas de validación y pesos
+"MAE simple, validación hasta 1.000 M: con tope / sin tope",95.39896674923607,121.4 M sin tope; 5635 filas
+"MAE simple, validación más de 1.000 M: con tope / sin tope",441.0981013764373,223.1 M sin tope; 1225 filas
