@@ -1,0 +1,13 @@
+numero,modelo,familia,max_test,min_test,pct_sobre_1650,n_sobre_1650,n_en_1650
+3,03_linear_full,Regresión lineal,2191.985506363493,234.9666930585002,0.204160995527902,21,0
+11,11_neural_net_full,Red neuronal,5887.0785433567835,97.18443526889166,3.3637954501263856,346,4
+108,108_linear_ext_core_coords_splines_by_type_level_q70_ridge_oof,Regresión lineal,1650.0,300.0,0.0,0,62
+104,104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned,Elastic net,1650.0,300.0,0.0,0,59
+105,105_cart_ext_core_coords_by_type_level_q70_ridge_tuned,CART,1580.0,331.0,0.0,0,0
+114,114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords,Random forest,1590.0,325.0,0.0,0,0
+127,127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix,Boosting,1730.091360827795,321.17199135451784,0.06805366517596734,7,0
+83,83_boosting_ext_core_coords_by_type_level_q70_ridge_s10,Boosting,1706.9548860980753,314.04425268707706,0.058331713007972,6,0
+148,148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords,Red neuronal,2001.988864,332.8088,1.6235660120552207,167,0
+152,152_ensemble_w70_30_2,Mezcla,1772.0314682015992,326.38004194816244,0.174995139023916,18,0
+185,185_knn_pt_core_coords_by_type_q70_tuned,kNN,1550.0,350.0,0.0,0,0
+49,49_en_boosting_core_coords_residual,Híbrido lineal + boosting,3563.5794722896003,287.44766814029805,0.6513707952556873,67,1
