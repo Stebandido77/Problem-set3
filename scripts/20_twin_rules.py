@@ -20,6 +20,7 @@ nuevas en views/cv_results.csv, columnas en oof/test_predictions.csv y un envío
 
 Uso:
   python scripts/20_twin_rules.py --model 123_boosting_..._s10 --numbers 124 125 126 127
+  python scripts/20_twin_rules.py --model 177_boosting_... --rules mix --numbers 181
 """
 
 import argparse
@@ -85,9 +86,12 @@ def evaluate_scheme(rule, base_pred, description, y, splits):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, help="nombre del modelo base en cv_results")
-    parser.add_argument("--numbers", nargs=len(RULES), type=int, required=True,
-                        help=f"números de envío para las reglas {RULES}")
+    parser.add_argument("--rules", nargs="+", default=RULES, choices=RULES)
+    parser.add_argument("--numbers", nargs="+", type=int, required=True,
+                        help="un número de envío por regla, en el orden de --rules")
     args = parser.parse_args()
+    if len(args.numbers) != len(args.rules):
+        parser.error("--numbers necesita un número por regla")
 
     trainer = importlib.import_module("04_train_models")
     train, test = load_processed()
@@ -103,7 +107,7 @@ def main():
     base_rest = args.model.split("_", 1)[1]
 
     report = []
-    for rule, number in zip(RULES, args.numbers):
+    for rule, number in zip(args.rules, args.numbers):
         name = f"{number}_{base_rest}_twin_{rule}"
         row = {"model": name, "family": "boosting", "features": args.model,
                "tuned": False}

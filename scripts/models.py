@@ -1529,3 +1529,149 @@ def load_best_params():
     if BEST_PARAMS_PATH.exists():
         return json.loads(BEST_PARAMS_PATH.read_text())
     return {}
+
+
+# --- Ronda 10: monotonía y vecinos más cercanos ---
+# Predictores en los que, todo lo demás igual, el precio no puede bajar.
+MONOTONE_FEATURES = ("surface", "log_surface", "surface_pt", "log_surface_pt", "bathrooms",
+                     "bathrooms_pt", "txt_n_parking", "txt_stratum", "ext_stratum",
+                     "ext_land_value_m2")
+
+
+class PinballGradient:
+    """Pérdida cuantílica como objetivo propio de LightGBM: gradiente de la pérdida pinball
+    multiplicado por 'scale' (la dispersión del precio, para que cada hoja se mueva en
+    pesos) y Hessiano constante. LightGBM no permite restricciones monótonas con su
+    objetivo 'quantile', que reajusta cada hoja al cuantil; con este objetivo sí."""
+
+    def __init__(self, alpha, scale):
+        self.alpha = alpha
+        self.scale = scale
+
+    def __call__(self, y_true, y_pred):
+        grad = self.scale * np.where(y_true > y_pred, -self.alpha, 1 - self.alpha)
+        return grad, np.ones_like(grad)
+
+
+class PinballBoosting(RegressorMixin, BaseEstimator):
+    """El LightGBM de la receta con PinballGradient y restricciones monótonas crecientes en
+    las columnas de 'increasing' que estén en X. Con 'increasing' vacío es el control: la
+    misma pérdida sin restricciones. Arranca del cuantil 'alpha' del precio de ajuste.
+    'lgbm_params' son otros hiperparámetros del LightGBM, como pares (nombre, valor)."""
+
+    def __init__(self, alpha=RECIPE_QUANTILE, increasing=(), lgbm_params=(),
+                 random_state=SEED):
+        self.alpha = alpha
+        self.increasing = increasing
+        self.lgbm_params = lgbm_params
+        self.random_state = random_state
+
+    def fit(self, X, y, sample_weight=None):
+        y = np.asarray(y, dtype=float)
+        self.offset_ = np.quantile(y, self.alpha)
+        scale = np.mean(np.abs(y - self.offset_))
+        constraints = [int(c in self.increasing) for c in X.columns]
+        self.model_ = clone(family_pipeline("boosting")[-1]).set_params(
+            objective=PinballGradient(self.alpha, scale), random_state=self.random_state,
+            monotone_constraints=constraints if any(constraints) else None,
+            **dict(self.lgbm_params))
+        self.model_.fit(X, y - self.offset_, sample_weight=sample_weight)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(X) + self.offset_
+
+
+# Bloques del kNN: características estandarizadas y ubicación en km.
+KNN_FEATURES = ["log_surface_pt", "surface_pt_imputed", "bedrooms", "bathrooms_pt",
+                "txt_n_parking", "txt_stratum", "ext_stratum", "ext_land_value_m2",
+                "txt_penthouse", "txt_duplex", "txt_terrace", "txt_view", "txt_remodeled"]
+KM_PER_DEGREE = 111.32
+BOGOTA_COS_LAT = np.cos(np.radians(4.65))
+
+
+class KnnBlocks(BaseEstimator):
+    """Representación del kNN en tres bloques, ajustada solo con las filas de ajuste:
+    texto (TF-IDF reducido con SVD y normalizado), ubicación (lat y lon en km) y
+    características (mediana + estandarización). Cada bloque se divide por la raíz de su
+    número de columnas, para que su peso no dependa de su tamaño."""
+
+    def __init__(self, n_components=50):
+        self.n_components = n_components
+
+    def fit(self, X):
+        self.text_ = make_pipeline(
+            TfidfVectorizer(ngram_range=(1, 2), min_df=5, sublinear_tf=True),
+            TruncatedSVD(self.n_components, random_state=SEED)).fit(X["text"].fillna(""))
+        self.features_ = make_pipeline(SimpleImputer(strategy="median"),
+                                       StandardScaler()).fit(X[KNN_FEATURES])
+        return self
+
+    def transform(self, X):
+        text = self.text_.transform(X["text"].fillna(""))
+        text /= np.maximum(np.linalg.norm(text, axis=1, keepdims=True), 1e-12)
+        location = np.column_stack([X["lat"] * KM_PER_DEGREE,
+                                    X["lon"] * KM_PER_DEGREE * BOGOTA_COS_LAT])
+        features = self.features_.transform(X[KNN_FEATURES]) / np.sqrt(len(KNN_FEATURES))
+        return {"text": text, "location": location / np.sqrt(2), "features": features}
+
+
+def knn_matrix(blocks, w_text, w_location):
+    """Une los bloques con sus pesos (el de las características vale 1)."""
+    return np.hstack([w_text * blocks["text"], w_location * blocks["location"],
+                      blocks["features"]])
+
+
+def neighbor_quantile(prices, quantile):
+    """Cuantil de los precios de los vecinos, fila a fila."""
+    return np.quantile(prices, quantile, axis=1)
+
+
+class QuantileKNN(RegressorMixin, BaseEstimator):
+    """Vecinos más cercanos sobre texto, ubicación y características: predice el
+    cuantil 'quantile' del precio de los 'k' vecinos de ajuste más cercanos."""
+
+    def __init__(self, k=20, w_text=1.0, w_location=1.0, quantile=RECIPE_QUANTILE,
+                 n_components=50):
+        self.k = k
+        self.w_text = w_text
+        self.w_location = w_location
+        self.quantile = quantile
+        self.n_components = n_components
+
+    def fit(self, X, y, sample_weight=None):
+        self.blocks_ = KnnBlocks(self.n_components).fit(X)
+        self.y_ = np.asarray(y, dtype=float)
+        matrix = knn_matrix(self.blocks_.transform(X), self.w_text, self.w_location)
+        self.index_ = NearestNeighbors(n_neighbors=min(self.k, len(X))).fit(matrix)
+        return self
+
+    def predict(self, X):
+        matrix = knn_matrix(self.blocks_.transform(X), self.w_text, self.w_location)
+        _, idx = self.index_.kneighbors(matrix)
+        return neighbor_quantile(self.y_[idx], self.quantile)
+
+
+class ScaledColumns(RegressorMixin, BaseEstimator):
+    """Estandariza las columnas, menos las de 'keep', con la media y la desviación de las
+    filas de ajuste (los faltantes siguen faltantes). Lo necesitan las hojas lineales de
+    LightGBM: sin escala, la penalización de la parte lineal casi no actúa sobre
+    predictores grandes como el valor del terreno."""
+
+    def __init__(self, model, keep=("is_house",)):
+        self.model = model
+        self.keep = keep
+
+    def _scale(self, X):
+        X = X.copy()
+        X[self.columns_] = self.scaler_.transform(X[self.columns_])
+        return X
+
+    def fit(self, X, y, sample_weight=None):
+        self.columns_ = [c for c in X.columns if c not in self.keep]
+        self.scaler_ = StandardScaler().fit(X[self.columns_])
+        self.model_ = fit_model(clone(self.model), self._scale(X), y, sample_weight)
+        return self
+
+    def predict(self, X):
+        return self.model_.predict(self._scale(X))

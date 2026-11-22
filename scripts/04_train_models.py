@@ -27,9 +27,10 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from models import (FAMILIES, ByPropertyType, DropColumns, EmbeddingNet, EmbeddingSVD,
-                    FocusFineTune, ImputedArea, LocalFit, NameLevel, NeighborhoodLevel, PriceWeighted,
-                    QuantileNet,
+from models import (FAMILIES, MONOTONE_FEATURES, ByPropertyType, DropColumns, EmbeddingNet,
+                    EmbeddingSVD, FocusFineTune, ImputedArea, LocalFit, NameLevel,
+                    NeighborhoodLevel, PinballBoosting, PriceWeighted, QuantileKNN, QuantileNet,
+                    ScaledColumns,
                     ResidualBoosting, RidgeText, RoundColumns, TailOversample, SameBuilding, SeedAverage, SyntheticTail,
                     TextFeatures, TextNet, TextPredictors, TrimPricePerM2, TruncationCorrection,
                     TwinFilter, build_model,
@@ -52,7 +53,7 @@ SCHEMES = {
 
 # Familias que usan un solo núcleo: conviene ajustar sus particiones en paralelo.
 # La red cuantílica usa 4 hilos de torch por ajuste: sus particiones también van en paralelo.
-SINGLE_CORE_FAMILIES = {"linear", "elastic_net", "cart", "neural_net", "quantile_net"}
+SINGLE_CORE_FAMILIES = {"linear", "elastic_net", "cart", "neural_net", "quantile_net", "knn"}
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,9 @@ class Spec:
     twins: str = ""              # 'drop' o 'weight' para los anuncios repetidos (TwinFilter)
     trim: bool = False           # sin precios por m2 fuera de p1-p99 del tipo (TrimPricePerM2)
     surface: str = ""            # columna de área si no es la del conjunto ('surface_pt')
+    pinball: bool = False        # LightGBM con pérdida pinball propia (PinballBoosting)
+    monotone: tuple = ()         # columnas con restricción monótona creciente (con pinball)
+    scale: bool = False          # estandariza los predictores (ScaledColumns)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -518,6 +522,39 @@ if "quantile_net_q70" in load_best_params():
     ROUND_9.append(Spec("quantile_net", "pt_core_coords", "by_type_q70_ridge_nocoords_tuned",
                         text_sources=("ridge",), tuned=True, tune_key="quantile_net_q70",
                         params=(("n_seeds", 5),), **NET_148))
+# Ronda 10: la receta del 127 (la 125 más la regla 'mix' de gemelos de 20_twin_rules.py,
+# que da la 181 a la 184) con restricciones monótonas y con hojas lineales. Criterio:
+# validación espacial y después el ponderado; menos de 2 M es ruido.
+ROUND_10_START = 177
+R127 = dict(text_sources=("ridge",), target="level", by_type=True, drop_coords=True,
+            n_seeds=10)
+ROUND_10 = [
+    # 1. LightGBM no admite restricciones monótonas con su pérdida cuantílica: se usa una
+    # pinball propia. Control con esa pérdida y sin restricciones; luego con restricciones
+    # en área, baños, parqueaderos, estrato y valor del terreno, sin y con el ridge del texto.
+    Spec("boosting", "pt_core_coords", "by_type_pinball_ridge_nocoords_s10", pinball=True,
+         **R127),
+    Spec("boosting", "pt_core_coords", "by_type_pinball_mono_ridge_nocoords_s10",
+         pinball=True, monotone=MONOTONE_FEATURES, **R127),
+    Spec("boosting", "pt_core_coords", "by_type_pinball_mono_txt_ridge_nocoords_s10",
+         pinball=True, monotone=MONOTONE_FEATURES + ("txt_ridge",), **R127),
+    # 2. Hojas lineales con la parte lineal regularizada (linear_lambda) y los predictores
+    # estandarizados. Con la pérdida cuantílica de LightGBM la penalización no actúa (209 M
+    # en el nororiente con lambda de 1 a 1e7 y precios negativos en el test): se usa la
+    # pinball propia, con la que lambda 100 ganó a 1 en una prueba de una semilla. Con 5
+    # semillas en lugar de 10, para que la ronda cupiera en el tiempo.
+    Spec("boosting", "pt_core_coords", "by_type_pinball_linear_ridge_nocoords_s5",
+         pinball=True, scale=True, params=(("linear_tree", True), ("linear_lambda", 100.0)),
+         **{**R127, "n_seeds": 5}),
+]
+# 3. kNN por tipo sobre texto, ubicación y características, con el percentil 70 de los
+# vecinos. k y los pesos de los bloques salen de 28_tune_knn.py (clave 'knn_q70', con la
+# espacial como objetivo, así que su espacial es optimista). Se agrega cuando existe la clave.
+ROUND_10B_START = 185
+ROUND_10B = []
+if "knn_q70" in load_best_params():
+    ROUND_10B.append(Spec("knn", "pt_core_coords", "by_type_q70_tuned", by_type=True,
+                          tuned=True, tune_key="knn_q70"))
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -535,7 +572,9 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_7D, start=ROUND_7D_START)),
                   **dict(enumerate(ROUND_7E, start=ROUND_7E_START)),
                   **dict(enumerate(ROUND_8, start=ROUND_8_START)),
-                  **dict(enumerate(ROUND_9, start=ROUND_9_START))}
+                  **dict(enumerate(ROUND_9, start=ROUND_9_START)),
+                  **dict(enumerate(ROUND_10, start=ROUND_10_START)),
+                  **dict(enumerate(ROUND_10B, start=ROUND_10B_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -576,6 +615,12 @@ def build_spec_model(spec, params):
     elif spec.family == "quantile_net":
         model = QuantileNet(**params)
         model = ByPropertyType(model) if spec.by_type else model
+    elif spec.family == "knn":
+        model = QuantileKNN(**params)
+        model = ByPropertyType(model) if spec.by_type else model
+    elif spec.pinball:
+        model = PinballBoosting(increasing=spec.monotone, lgbm_params=spec.params)
+        model = ByPropertyType(model) if spec.by_type else model
     elif spec.fine_tune:
         model = FocusFineTune(build_model(spec.family, params, spec.target, False, surface_col))
         model = ByPropertyType(model) if spec.by_type else model
@@ -584,6 +629,8 @@ def build_spec_model(spec, params):
                             spec.recipe)
     if spec.n_seeds > 1:
         model = SeedAverage(model, spec.n_seeds)
+    if spec.scale:
+        model = ScaledColumns(model)
     if spec.impute_area:
         model = ImputedArea(model, surface_col)
     if spec.synthetic:
@@ -627,7 +674,7 @@ def spec_features(spec, sets):
     features = sets[spec.features]
     if spec.neighbors or spec.drop_coords:
         features = features + [c for c in COORD_FEATURES if c not in features]
-    if spec.text:
+    if spec.text or spec.family == "knn":
         features = features + ["text"]
     if spec.names:
         features = features + ["title_name"]
@@ -677,7 +724,7 @@ def main():
     parser = argparse.ArgumentParser()
     # El híbrido de 33 combina dos familias; la red cuantílica es la red de la ronda 3;
     # CatBoost y XGBoost son la pieza C de la ronda 4.
-    families = FAMILIES + ["en_boosting", "quantile_net", "catboost", "xgboost"]
+    families = FAMILIES + ["en_boosting", "quantile_net", "catboost", "xgboost", "knn"]
     parser.add_argument("--families", nargs="+", default=families, choices=families)
     parser.add_argument("--specs", nargs="+", type=int, help="números de SPECS a correr")
     parser.add_argument("--schemes", nargs="+", default=list(SCHEMES), choices=list(SCHEMES),
