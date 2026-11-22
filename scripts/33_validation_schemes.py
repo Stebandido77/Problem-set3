@@ -18,7 +18,8 @@ archivo enviado y completa lo que falta así:
 Salidas en views/:
   validation_schemes.csv        un envío por fila con todos los esquemas
   validation_rank_corr.csv      Spearman, pares bien ordenados y brecha por esquema
-  validation_vs_kaggle.png      cada esquema contra Kaggle
+  validation_vs_kaggle.png      cada esquema contra Kaggle (2 × 2)
+  validation_vs_kaggle_wide.png la misma figura en una fila, para diapositiva 16:9
   validation_rank_corr.png      Spearman por esquema
   validation_twins.png          aleatoria simple contra aleatoria con gemelos
   validation_level.png          la espacial premia bajar el nivel; el tablero no
@@ -265,18 +266,19 @@ def family_legend(fig, families, **kwargs):
     fig.legend(handles=handles, **kwargs)
 
 
-LABEL_OFFSETS = [(5, 3), (5, -11), (-6, 3), (-6, -11), (5, 11), (-6, 11), (5, -19),
-                 (-6, -19), (12, -4), (-14, -4)]
+LABEL_OFFSETS = [(4, 2), (4, -10), (-5, 2), (-5, -10), (-2, 6), (-2, -15), (9, -4),
+                 (-10, -4), (4, 10), (-5, 10), (4, -18), (-5, -18)]
 
 
 def place_labels(ax, xs, ys, texts, fontsize=8):
     """Etiquetas cerca de cada punto sin chocar entre sí ni con los puntos: para cada una
-    escoge, entre varias posiciones vecinas, la que menos se superpone con lo ya ubicado."""
+    escoge, entre varias posiciones vecinas, la que menos se superpone con lo ya ubicado y
+    penaliza las que quedan más cerca de otro punto que del propio (etiqueta ambigua)."""
     ax.figure.canvas.draw()
     points = ax.transData.transform(np.column_stack([xs, ys]))
     scale = ax.figure.dpi / 72
-    placed = [(x - 9, y - 9, x + 9, y + 9) for x, y in points]
-    for (x, y), (xd, yd), text in zip(points, zip(xs, ys), texts):
+    placed = [(x - 6, y - 6, x + 6, y + 6) for x, y in points]
+    for k, ((x, y), (xd, yd), text) in enumerate(zip(points, zip(xs, ys), texts)):
         width, height = 0.62 * fontsize * len(text) * scale, fontsize * scale
         best, best_cost = None, np.inf
         for dx, dy in LABEL_OFFSETS:
@@ -285,6 +287,10 @@ def place_labels(ax, xs, ys, texts, fontsize=8):
             box = (x0, y0, x0 + width, y0 + height)
             cost = sum(max(0, min(box[2], b[2]) - max(box[0], b[0]))
                        * max(0, min(box[3], b[3]) - max(box[1], b[1])) for b in placed)
+            center = np.array([(box[0] + box[2]) / 2, (box[1] + box[3]) / 2])
+            distance = np.hypot(*(points - center).T)
+            if np.delete(distance, k).min() < distance[k]:
+                cost += 400
             if cost < best_cost:
                 best, best_cost = (dx, dy, box), cost
         dx, dy, box = best
@@ -293,38 +299,69 @@ def place_labels(ax, xs, ys, texts, fontsize=8):
                     fontsize=fontsize, ha="right" if dx < 0 else "left", va="bottom")
 
 
-def plot_vs_kaggle(table, quality):
-    """Un panel por esquema: MAE del esquema contra el puntaje público (sin el ingenuo)."""
+def kaggle_points(table):
+    """Envíos con puntaje público, sin el ingenuo (377 M en Kaggle saca de escala los ejes)."""
     data = table.dropna(subset=["kaggle"])
-    data = data[data["numero"] > 0]
-    fig, axes = plt.subplots(2, 2, figsize=(11, 10.5), sharey=True)
+    return data[data["numero"] > 0]
+
+
+def draw_scheme_panels(axes, data, quality, label_size=8, title_size=10,
+                       separator=", "):
+    """Dibuja en cada eje un esquema contra Kaggle, con la línea de 45° y el número del envío."""
     stats = quality[quality["conjunto"] == "sin el ingenuo"].set_index("columna")
-    for ax, (column, label) in zip(axes.flat, SCHEMES.items()):
+    for ax, (column, label) in zip(axes, SCHEMES.items()):
         points = data.dropna(subset=[column])
         low = 5 * np.floor(points[column].min() / 5) - 5
         high = max(5 * np.ceil(points[column].max() / 5) + 10, 165)
         ax.plot([80, 240], [80, 240], color="0.6", lw=1, ls="--")
-        ax.scatter(points[column], points["kaggle"], s=45, zorder=3,
+        ax.scatter(points[column], points["kaggle"], s=40, zorder=3,
                    color=[ps.FAMILY_COLORS[f] for f in points["familia"]])
         ax.set_xlim(low, high)
         ax.set_ylim(140, 240)
         place_labels(ax, points[column].to_numpy(), points["kaggle"].to_numpy(),
-                     points["numero"].astype(str).tolist())
+                     points["numero"].astype(str).tolist(), fontsize=label_size)
         s = stats.loc[column]
-        ax.set_title(f"{label}: Spearman {ps.es_number(s['spearman'], 2)} (n = {s['n']}),\n"
-                     f"brecha media {ps.es_number(s['brecha_media'])} M", fontsize=10)
+        ax.set_title(f"{label}\nSpearman {ps.es_number(s['spearman'], 2)} (n = {s['n']})"
+                     f"{separator}brecha media {ps.es_number(s['brecha_media'])} M",
+                     fontsize=title_size)
         ax.set_xlabel("MAE del esquema (millones)")
-        ax.set_ylabel("MAE público en Kaggle (millones)")
+    axes[0].set_ylabel("MAE público en Kaggle (millones)")
+
+
+NOTE_VS_KAGGLE = ("Línea punteada: esquema = Kaggle; encima de ella, el esquema fue optimista "
+                  "con ese envío. Sin el ingenuo 00 (377 M en Kaggle). Cada panel tiene su "
+                  "propio eje horizontal.")
+
+
+def plot_vs_kaggle(table, quality):
+    """Un panel por esquema (2 × 2): MAE del esquema contra el puntaje público."""
+    data = kaggle_points(table)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 10.5), sharey=True)
+    draw_scheme_panels(axes.flat, data, quality)
+    axes[1, 0].set_ylabel("MAE público en Kaggle (millones)")
     fig.suptitle("Todos los esquemas son optimistas; el ponderado acierta el nivel de los "
                  "boosting,\npero no el de la red 148, el lineal, el CART ni los híbridos",
                  fontsize=13)
     family_legend(fig, sorted(data["familia"].unique()), loc="lower center", ncol=4,
                   bbox_to_anchor=(0.5, -0.05))
-    fig.text(0.5, -0.1, "Línea punteada: esquema = Kaggle; encima de ella, el esquema fue "
-             "optimista con ese envío.\nSin el ingenuo 00 (377 M en Kaggle). Cada panel tiene "
-             "su propio eje horizontal.", ha="center", fontsize=9, color="0.4")
+    fig.text(0.5, -0.08, NOTE_VS_KAGGLE.replace(" Sin", "\nSin"), ha="center", fontsize=9,
+             color="0.4")
     fig.tight_layout()
     return ps.save(fig, "validation_vs_kaggle.png")
+
+
+def plot_vs_kaggle_wide(table, quality):
+    """La misma figura en una fila, para una diapositiva 16:9 (sin título general)."""
+    data = kaggle_points(table)
+    fig, axes = plt.subplots(1, 4, figsize=(14, 4.6), sharey=True)
+    draw_scheme_panels(axes, data, quality, label_size=8, title_size=9.5, separator="\n")
+    families = sorted(data["familia"].unique())
+    family_legend(fig, families, loc="lower center", ncol=len(families),
+                  bbox_to_anchor=(0.5, -0.07), fontsize=9.5, handletextpad=0.2,
+                  columnspacing=1.2)
+    fig.text(0.5, -0.12, NOTE_VS_KAGGLE, ha="center", fontsize=8.5, color="0.4")
+    fig.tight_layout(w_pad=1.5)
+    return ps.save(fig, "validation_vs_kaggle_wide.png")
 
 
 def plot_rank_corr(quality):
@@ -463,7 +500,8 @@ def main():
     table.to_csv(VIEWS_DIR / "validation_schemes.csv", index=False)
     quality.to_csv(VIEWS_DIR / "validation_rank_corr.csv", index=False)
     results = pd.read_csv(VIEWS_DIR / "cv_results.csv")
-    figures = [plot_vs_kaggle(table, quality), plot_rank_corr(quality),
+    figures = [plot_vs_kaggle(table, quality), plot_vs_kaggle_wide(table, quality),
+               plot_rank_corr(quality),
                plot_twins(table, results), plot_level(results, table)]
     for path in figures:
         print("figura:", path.name)
