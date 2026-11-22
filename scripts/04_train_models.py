@@ -51,7 +51,8 @@ SCHEMES = {
 }
 
 # Familias que usan un solo núcleo: conviene ajustar sus particiones en paralelo.
-SINGLE_CORE_FAMILIES = {"linear", "elastic_net", "cart", "neural_net"}
+# La red cuantílica usa 4 hilos de torch por ajuste: sus particiones también van en paralelo.
+SINGLE_CORE_FAMILIES = {"linear", "elastic_net", "cart", "neural_net", "quantile_net"}
 
 
 @dataclass(frozen=True)
@@ -492,6 +493,31 @@ ROUND_8 = [
     Spec("boosting", "pt_core_coords", "by_type_per_m2_q70_ridge", text_sources=("ridge",),
          target="per_m2", by_type=True, surface="surface_pt", params=quantile_loss(0.70)),
 ]
+# Ronda 9: mejorar la red 148 (la que mejor mezcla con el boosting) y una segunda red
+# distinta a propósito. Criterio: validación espacial; se reportan el ponderado y la media
+# en test. Los números 166 y 167 son los apilamientos de 24_assumptions.py.
+ROUND_9_START = 168
+NET_148 = dict(target="level", by_type=True, drop_coords=True)
+ROUND_9 = [
+    # 1a. La 148 con 10 semillas (por defecto promedia 5).
+    Spec("quantile_net", "ext_core_coords", "by_type_q70_ridge_nocoords_s10",
+         text_sources=("ridge",), params=(("n_seeds", 10),), **NET_148),
+    # 1b. La 148 con el área y los baños del mismo punto (A1, ronda 7).
+    Spec("quantile_net", "pt_core_coords", "by_type_q70_ridge_nocoords",
+         text_sources=("ridge",), **NET_148),
+    # 2. Segunda red: una sola capa ancha y la red de texto sobre embeddings en lugar del
+    # ridge, para que se equivoque en inmuebles distintos.
+    Spec("quantile_net", "ext_core_coords", "by_type_q70_wide_embnet_nocoords",
+         text_sources=("net",), params=(("hidden", (512,)), ("dropout", 0.2)), **NET_148),
+]
+# 1c. La 169 con los hiperparámetros de 17_tune_families.py --spec 169 --objective spatial
+# (clave 'quantile_net_q70', buscados con una semilla). Su espacial es optimista: se escogió
+# el mínimo de esas mismas particiones espaciales. Vuelve a las 5 semillas de la 148:
+# las 10 de la 168 no la mejoran. Se agrega cuando existe la clave.
+if "quantile_net_q70" in load_best_params():
+    ROUND_9.append(Spec("quantile_net", "pt_core_coords", "by_type_q70_ridge_nocoords_tuned",
+                        text_sources=("ridge",), tuned=True, tune_key="quantile_net_q70",
+                        params=(("n_seeds", 5),), **NET_148))
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -508,7 +534,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_7C, start=ROUND_7C_START)),
                   **dict(enumerate(ROUND_7D, start=ROUND_7D_START)),
                   **dict(enumerate(ROUND_7E, start=ROUND_7E_START)),
-                  **dict(enumerate(ROUND_8, start=ROUND_8_START))}
+                  **dict(enumerate(ROUND_8, start=ROUND_8_START)),
+                  **dict(enumerate(ROUND_9, start=ROUND_9_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se

@@ -15,8 +15,12 @@ Salidas:
   stores/processed/optuna_round5.db  estudio de Optuna (no se versiona): una búsqueda
                                      cortada sigue donde iba al correrla otra vez
 
+Ronda 9: también la red cuantílica de la 148, con '--objective spatial' (solo la validación
+espacial, que acertó con la red en Kaggle).
+
 Uso:
   python 17_tune_families.py --spec 99 --n-trials 25   # 25 evaluaciones en total
+  python 17_tune_families.py --spec 169 --n-trials 20 --objective spatial
 """
 
 import argparse
@@ -56,14 +60,29 @@ def suggest_cart(trial):
             step + "ccp_alpha": trial.suggest_float("ccp_alpha", 1e-2, 1e3, log=True)}
 
 
+def suggest_quantile_net(trial):
+    """Ronda 9: la red cuantílica de la 148 con una semilla (la fila final, la 171, promedia
+    5)."""
+    width = trial.suggest_categorical("width", [64, 128, 256, 512])
+    n_layers = trial.suggest_int("n_layers", 1, 3)
+    return {"hidden": tuple(max(width // 2 ** k, 32) for k in range(n_layers)),
+            "dropout": trial.suggest_float("dropout", 0.0, 0.4),
+            "lr": trial.suggest_float("lr", 1e-3, 1e-2, log=True),
+            "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True),
+            "n_seeds": 1}
+
+
 SEARCHES = {"random_forest": suggest_random_forest, "elastic_net": suggest_elastic_net,
-            "cart": suggest_cart}
+            "cart": suggest_cart, "quantile_net": suggest_quantile_net}
 # Valores por defecto de models.QUANTILE_RECIPES: el primer candidato de cada búsqueda.
 STARTS = {"random_forest": {"min_samples_leaf": 5, "max_features": 0.4, "max_depth": None},
           "elastic_net": {"alpha": 0.01, "l1_ratio": 0.5, "n_knots_geo": 6},
-          "cart": {"max_depth": 12, "min_samples_leaf": 20, "ccp_alpha": 1e-2}}
+          "cart": {"max_depth": 12, "min_samples_leaf": 20, "ccp_alpha": 1e-2},
+          # La 148: capas de 128 y 64, dropout 0,1, tasa 3e-3 y regularización 1e-4.
+          "quantile_net": {"width": 128, "n_layers": 2, "dropout": 0.1, "lr": 3e-3,
+                           "weight_decay": 1e-4}}
 # Las familias de un núcleo ajustan las 6 particiones en paralelo; el bosque usa todos.
-PARALLEL_FAMILIES = {"elastic_net", "cart"}
+PARALLEL_FAMILIES = {"elastic_net", "cart", "quantile_net"}
 
 
 class FamilyProblem(PROBLEM):
@@ -80,7 +99,7 @@ class FamilyProblem(PROBLEM):
                                        for part in self.parts)
 
 
-def search(problem, family, n_trials):
+def search(problem, family, n_trials, objective_name="mean"):
     import optuna
     key = f"{family}_q70"
     study = optuna.create_study(
@@ -98,8 +117,9 @@ def search(problem, family, n_trials):
         params = SEARCHES[family](trial)
         preds = problem.predictions(params)
         weighted, spatial = problem.score(preds)
+        value = spatial if objective_name == "spatial" else (weighted + spatial) / 2
         rows.append({"trial": trial.number, **trial.params, "mae_weighted": weighted,
-                     "mae_spatial": spatial, "objective": (weighted + spatial) / 2,
+                     "mae_spatial": spatial, "objective": value,
                      "mean_northeast": float(np.mean(preds[0])),
                      "seconds": time.time() - start})
         print(f"{family} {trial.number:2d}: {rows[-1]['objective'] / 1e6:6.2f} M "
@@ -107,7 +127,7 @@ def search(problem, family, n_trials):
               f"{rows[-1]['seconds']:.0f} s {trial.params}", flush=True)
         pd.DataFrame(rows).to_csv(trace_path, index=False)
         trial.set_user_attr("params", params)
-        return (weighted + spatial) / 2
+        return value
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     study.optimize(objective, n_trials=max(n_trials - len(done), 0))
@@ -122,9 +142,11 @@ def main():
     parser.add_argument("--spec", type=int, required=True,
                         help="número de 04_train_models.py (sin sintonizar)")
     parser.add_argument("--n-trials", type=int, default=25)
+    parser.add_argument("--objective", choices=["mean", "spatial"], default="mean",
+                        help="promedio de ponderado y espacial, o solo la espacial (ronda 9)")
     args = parser.parse_args()
     problem = FamilyProblem(args.spec)
-    search(problem, problem.inner.family, args.n_trials)
+    search(problem, problem.inner.family, args.n_trials, args.objective)
 
 
 if __name__ == "__main__":
