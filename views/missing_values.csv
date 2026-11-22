@@ -1,0 +1,23 @@
+variable,etapa,base,faltante_pct,faltantes,filas
+Área,Properati,train,68.70665562571162,26551,38644
+Área,+ texto del anuncio,train,39.00993685953835,15075,38644
+Área,+ anuncios del mismo punto,train,25.693509988614018,9929,38644
+Baños,Properati,train,26.06096677362592,10071,38644
+Baños,+ texto del anuncio,train,14.915640202877547,5764,38644
+Baños,+ anuncios del mismo punto,train,9.944622709864404,3843,38644
+Cuartos,Properati,train,47.251837283925056,18260,38644
+Cuartos,+ alcobas,train,0.0,0,38644
+Estrato,Manzana (datos abiertos),train,8.187558223786358,3164,38644
+Estrato,Texto del anuncio,train,92.73367146258151,35836,38644
+Valor del terreno,Manzana (datos abiertos),train,0.06986854362902391,27,38644
+Área,Properati,test,66.57592844643204,6848,10286
+Área,+ texto del anuncio,test,36.068442543262684,3710,10286
+Área,+ anuncios del mismo punto,test,19.72584094886253,2029,10286
+Baños,Properati,test,24.217382850476376,2491,10286
+Baños,+ texto del anuncio,test,13.620454987361462,1401,10286
+Baños,+ anuncios del mismo punto,test,10.256659537235077,1055,10286
+Cuartos,Properati,test,44.54598483375462,4582,10286
+Cuartos,+ alcobas,test,0.0,0,10286
+Estrato,Manzana (datos abiertos),test,5.677620066109275,584,10286
+Estrato,Texto del anuncio,test,94.5848726424266,9729,10286
+Valor del terreno,Manzana (datos abiertos),test,0.058331713007972,6,10286

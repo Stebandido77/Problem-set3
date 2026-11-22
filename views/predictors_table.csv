@@ -1,0 +1,42 @@
+predictor,tipo,fuente,intuicion,en_boosting_127,en_red_148,en_152
+ext_stratum,externo,"Datos abiertos de Bogotá, por manzana",estrato de la manzana: nivel socioeconómico del entorno,True,True,True
+ext_land_value_m2,externo,"Datos abiertos de Bogotá, por manzana",valor catastral del suelo: capitaliza la ubicación,True,True,True
+dist_zona_t_m,externo,Distancia a hitos (coordenadas aproximadas),cercanía al centro de comercio y ocio del norte,True,True,True
+dist_parque_93_m,externo,Distancia a hitos (coordenadas aproximadas),cercanía a un hito de gama alta,True,True,True
+dist_centro_internacional_m,externo,Distancia a hitos (coordenadas aproximadas),cercanía al centro de negocios,True,True,True
+dist_plaza_bolivar_m,externo,Distancia a hitos (coordenadas aproximadas),distancia al centro histórico,True,True,True
+osm_dist_bank_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_bar_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_hospital_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_mall_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_park_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_police_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_restaurant_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_school_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_supermarket_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_transit_station_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_dist_university_m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_n_bank_500m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_n_bar_500m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_n_park_500m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_n_restaurant_500m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+osm_n_school_500m,externo,OpenStreetMap (Overpass API),acceso a servicios y amenidades del entorno,False,False,False
+txt_parking,texto,Reglas sobre el título y la descripción,el parqueadero se paga aparte en Bogotá,True,True,True
+txt_n_parking,texto,Reglas sobre el título y la descripción,"más parqueaderos, inmueble más grande y caro",True,True,True
+txt_terrace,texto,Reglas sobre el título y la descripción,"área exterior privada, amenidad de gama alta",True,True,True
+txt_balcony,texto,Reglas sobre el título y la descripción,amenidad exterior,True,True,True
+txt_elevator,texto,Reglas sobre el título y la descripción,edificio más nuevo o de más pisos,True,True,True
+txt_storage,texto,Reglas sobre el título y la descripción,espacio adicional,True,True,True
+txt_fireplace,texto,Reglas sobre el título y la descripción,acabado típico del nororiente,True,True,True
+txt_security,texto,Reglas sobre el título y la descripción,costo de administración y seguridad,True,True,True
+txt_gym,texto,Reglas sobre el título y la descripción,amenidad de conjunto de gama alta,True,True,True
+txt_pool,texto,Reglas sobre el título y la descripción,amenidad de conjunto de gama alta,True,True,True
+txt_gated,texto,Reglas sobre el título y la descripción,"conjunto cerrado, amenidades compartidas",True,True,True
+txt_remodeled,texto,Reglas sobre el título y la descripción,estado del inmueble,True,True,True
+txt_duplex,texto,Reglas sobre el título y la descripción,tipología de mayor área,True,True,True
+txt_penthouse,texto,Reglas sobre el título y la descripción,"último piso, prima de lujo",True,True,True
+txt_view,texto,Reglas sobre el título y la descripción,"vista panorámica, prima de ubicación",True,True,True
+txt_stratum,texto,Reglas sobre el título y la descripción,estrato declarado por el vendedor,True,True,True
+txt_floor,texto,Reglas sobre el título y la descripción,"piso alto, mejor vista y menos ruido",True,True,True
+txt_desc_length,texto,Reglas sobre el título y la descripción,anuncios cuidados acompañan inmuebles caros,True,True,True
+txt_ridge,texto,Ridge TF-IDF del título y la descripción,todo el vocabulario del anuncio resumido en un precio fuera de muestra,True,True,True

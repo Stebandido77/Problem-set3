@@ -1,0 +1,7 @@
+tipo,fuente,n,en_152
+externo,"Datos abiertos de Bogotá, por manzana",2,2
+externo,Distancia a hitos (coordenadas aproximadas),4,4
+externo,OpenStreetMap (Overpass API),16,0
+texto,Reglas sobre el título y la descripción,18,18
+texto,Ridge TF-IDF del título y la descripción,1,1
+estructural,Área y baños del mismo punto (solo boosting 127),7,7
