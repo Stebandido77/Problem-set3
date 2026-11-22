@@ -6,7 +6,7 @@
 #
 # Uso:  bash run_all.sh                    # usa las descargas externas ya versionadas
 #       bash run_all.sh --download         # vuelve a descargar OSM y los datos de Bogotá
-# Tarda unas dos horas y media en 16 núcleos (ver README, "Cómo reproducir").
+# El tiempo de una corrida completa está en el README ("Cómo reproducir").
 set -euo pipefail
 cd "$(dirname "$0")/scripts"
 PYTHON="${PYTHON:-python}"
@@ -29,11 +29,21 @@ fi
 #    bosque 114, boosting 83 y 125, red 148. La 127 es la 125 con la regla de anuncios
 #    repetidos y la 152 mezcla la 127 (70 %) con la red 148 (30 %).
 "$PYTHON" 04_train_models.py --specs 104 105 108 114 83 125 148 \
-    --schemes random_twins spatial northeast
+    --schemes random random_twins spatial northeast
 "$PYTHON" 20_twin_rules.py --rules mix --numbers 127 \
     --model 125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
 "$PYTHON" 06_ensemble.py --number 152 --how weighted --weights 0.7 0.3 --models \
     127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix \
+    148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
+
+# 3b. Comparaciones que usan las presentaciones: el kNN 185 y la 186, que mezcla la 181
+#     (la 177 con pinball propia, más la regla de gemelos) con la red 148 y gana en la
+#     espacial solo por bajar el nivel.
+"$PYTHON" 04_train_models.py --specs 177 185 --schemes spatial northeast
+"$PYTHON" 20_twin_rules.py --rules mix --numbers 181 \
+    --model 177_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10
+"$PYTHON" 06_ensemble.py --number 186 --how weighted --weights 0.7 0.3 --models \
+    181_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10_twin_mix \
     148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
 
 # 4. La receta de la 125 con cuantiles 0,20, 0,30 y 0,50 para la regla de compra.

@@ -15,3 +15,5 @@ stores/processed/optuna_round7.db
 
 # Corrida de verificación desde cero (run_all en un clon limpio)
 _clean_run/
+# Vista previa de las diapositivas (36_build_presentations.py --preview)
+document/_preview/

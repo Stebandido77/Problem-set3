@@ -29,10 +29,17 @@ Run 03_naive_baselines.py
 Run 13_text_embeddings.py
 
 # 3. Mejor especificación de cada familia, la 127 y la mezcla final 152.
-Run 04_train_models.py --specs 104 105 108 114 83 125 148 --schemes random_twins spatial northeast
+Run 04_train_models.py --specs 104 105 108 114 83 125 148 --schemes random random_twins spatial northeast
 Run 20_twin_rules.py --rules mix --numbers 127 --model 125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
 Run 06_ensemble.py --number 152 --how weighted --weights 0.7 0.3 --models `
     127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix `
+    148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
+
+# 3b. El kNN 185 y la mezcla 186 (181 = 177 con la regla de gemelos, más la red 148).
+Run 04_train_models.py --specs 177 185 --schemes spatial northeast
+Run 20_twin_rules.py --rules mix --numbers 181 --model 177_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10
+Run 06_ensemble.py --number 186 --how weighted --weights 0.7 0.3 --models `
+    181_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10_twin_mix `
     148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
 
 # 4. Cuantiles 0,20, 0,30 y 0,50 para la regla de compra.
