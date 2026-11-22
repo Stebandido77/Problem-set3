@@ -193,14 +193,14 @@ def build_compare(t):
 
     no_naive = corr[corr["conjunto"] == "sin el ingenuo"].set_index("esquema")
     page = dk.slide(
-        deck, "El holdout junto a Chapinero ordena mejor los envíos; la aleatoria simple casi "
-              "no sirve",
+        deck, "El holdout junto a Chapinero ordena mejor los envíos; la aleatoria simple es "
+              "la que peor ordena",
         "Validación aleatoria, espacial, ponderada y Kaggle, modelo por modelo. Cada punto es "
         "un envío con puntaje público; la línea punteada es la igualdad. Todos los esquemas "
         "son optimistas, porque Chapinero es más caro y distinto del resto de Bogotá. El "
         "holdout nororiental (los inmuebles del train junto al test) ordena mejor y, "
         "ponderado como el test, acierta el nivel en boosting y bosque; pero es optimista con "
-        "la red, la lineal, el CART y los híbridos. La aleatoria simple apenas ordena.",
+        "la red, la lineal, el CART y los híbridos. La aleatoria simple es la que peor ordena.",
         subtitle="Spearman con Kaggle, sin el ingenuo, en cada panel; el holdout nororiental "
                  "sin ponderar llega a " + es_number(
                      no_naive.loc["Nororiental sin ponderar", "spearman"], 2)

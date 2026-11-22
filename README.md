@@ -33,16 +33,16 @@ puntaje público de los 17 registrados.
 
 Una fila por familia (su mejor especificación con la receta común):
 
-| Familia | Fila | Búsqueda de hiperparámetros | Aleatoria con gemelos | Espacial | Ponderado | Kaggle |
-|---|---:|---|---:|---:|---:|---:|
-| Regresión lineal | 108 | no aplica (mínimos cuadrados) | 144,1 | 164,1 | 166,0 | 180,5 |
-| Elastic net | 104 | Optuna TPE, 15 evaluaciones | 144,5 | 158,5 | 165,8 | sin envío |
-| CART | 105 | Optuna TPE, 25 evaluaciones | 141,3 | 159,8 | 168,7 | 177,5 |
-| Random forest | 114 | Optuna TPE, 25; NSGA-II, 120 (no mejora) | 123,1 | 143,8 | 159,6 | 158,9 |
-| Boosting | 127 | sin sintonizar (TPE y CMA-ES en la 98 no mejoraron en Kaggle) | 110,2 | 127,0 | 155,5 | sin envío |
-| Boosting | 83 | igual que la 127 | 111,0 | 131,5 | 154,8 | 152,1 |
-| Red neuronal | 148 | sin sintonizar (TPE en la 171: mejor espacial, peor ponderado) | 124,8 | 137,6 | 148,2 | 157,1 |
-| **Mezcla** | **152** | pesos fijos 70/30 | 112,2 | 127,6 | 151,7 | **148,2** |
+| Familia | Fila | Búsqueda de hiperparámetros | Aleatoria | Aleatoria con gemelos | Espacial | Ponderado | Kaggle |
+|---|---:|---|---:|---:|---:|---:|---:|
+| Regresión lineal | 108 | no aplica (mínimos cuadrados) | 138,8 | 144,1 | 164,1 | 166,0 | 180,5 |
+| Elastic net | 104 | Optuna TPE, 15 evaluaciones | 139,0 | 144,5 | 158,5 | 165,8 | sin envío |
+| CART | 105 | Optuna TPE, 25 evaluaciones | 133,2 | 141,3 | 159,8 | 168,7 | 177,5 |
+| Random forest | 114 | Optuna TPE, 25; NSGA-II, 120 (no mejora) | 105,6 | 123,1 | 143,8 | 159,6 | 158,9 |
+| Boosting | 127 | sin sintonizar (TPE y CMA-ES en la 98 no mejoraron en Kaggle) | 89,0 | 110,2 | 127,0 | 155,5 | sin envío |
+| Boosting | 83 | igual que la 127 | 96,2 | 111,0 | 131,5 | 154,8 | 152,1 |
+| Red neuronal | 148 | sin sintonizar (TPE en la 171: mejor espacial, peor ponderado) | 118,0 | 124,8 | 137,6 | 148,2 | 157,1 |
+| **Mezcla** | **152** | pesos fijos 70/30 | 95,5 | 112,2 | 127,6 | 151,7 | **148,2** |
 
 Los hiperparámetros de cada familia y el detalle de cada búsqueda están en
 `views/family_table.csv` (columnas `hiperparametros` y `busqueda`). Ojo: la elastic net,
@@ -52,7 +52,7 @@ esas filas, esas dos columnas son algo optimistas y Kaggle es la única medida f
 muestra.
 
 - **Validación** (`views/validation_rank_corr.csv`, sin el ingenuo): frente a Kaggle, la
-  aleatoria simple apenas ordena los envíos (Spearman 0,30, n = 9); con los anuncios gemelos
+  aleatoria simple es la que peor ordena los envíos (Spearman 0,44, n = 13); con los anuncios gemelos
   en la misma partición sube a 0,78; la espacial da 0,69 (n = 15) y el holdout nororiental
   ponderado 0,83 (n = 12). Todas son optimistas; la espacial, en unos 27 M. La espacial
   premia bajar el nivel de las predicciones y el tablero no.
@@ -125,7 +125,12 @@ ingenuos, la mejor especificación de cada familia (108, 104, 105, 114, 83 y 125
 la mezcla final 152, dos comparaciones que usan las presentaciones (el kNN 185 y la mezcla
 186, de la 177 → 181 con la red 148), los tres cuantiles de la regla de compra (190 a 192) y
 todas las figuras y tablas de `views/` que usan las presentaciones, que se arman al final en
-`document/`. PENDIENTE_TIEMPO
+`document/`. Una corrida completa desde cero en un clon limpio (sin los predictores
+procesados, con las descargas externas versionadas) tardó 2 h 15 min en un portátil con
+Windows 11 y CPU, y reprodujo los 17 envíos de la ruta principal (3 ingenuos y 14
+modelos, entre ellos la 152) con los mismos precios al peso: `save_submission` no creó
+ninguna versión `_v2` nueva. Las cifras de validación de `views/cv_results.csv` también
+coinciden; solo cambian los minutos de cada ajuste.
 
 Notas:
 

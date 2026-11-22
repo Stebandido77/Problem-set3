@@ -27,3 +27,4 @@ mix,test,200,,,,,,,878362797.3573232,877580844.7389728,179_boosting_pt_core_coor
 mix,spatial,582,157917259.8875422,149363229.39346156,124041466.98514202,123912638.55776502,,,,,180_boosting_pt_core_coords_by_type_pinball_linear_ridge_nocoords_s5
 mix,northeast,152,180152684.37226084,172908526.93439656,157514165.6457046,157353653.70247498,155675333.82653242,155486300.92700183,,,180_boosting_pt_core_coords_by_type_pinball_linear_ridge_nocoords_s5
 mix,test,200,,,,,,,859957924.991823,859394985.947,180_boosting_pt_core_coords_by_type_pinball_linear_ridge_nocoords_s5
+mix,random_twins,1309,102735991.62014687,88684060.3000392,110651549.78712507,110175564.43110546,,,,,125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
