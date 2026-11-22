@@ -38,7 +38,8 @@ destruye capital?
 │   ├── 19_genetic_search.py   NSGA-II (genético) para el bosque cuantílico (ronda 6)
 │   ├── 23_error_anatomy.py    error de la 83 y la 127 por segmento y los 50 peores (ronda 8)
 │   ├── 24_assumptions.py      nivel por segmento, apilamiento y tope de precio (ronda 8)
-│   └── 25_criteria_vs_kaggle.py  ponderado y espacial frente al puntaje público (ronda 8)
+│   ├── 25_criteria_vs_kaggle.py  ponderado y espacial frente al puntaje público (ronda 8)
+│   └── 27_net_table.py        redes y mezclas contra la 148 y la 152 (ronda 9)
 ├── stores/
 │   ├── raw/                   datos de Kaggle (train, test, plantilla de envío)
 │   ├── external/              caché de descargas de Bogotá (no se versiona)
@@ -92,6 +93,12 @@ python 23_error_anatomy.py
 python 04_train_models.py --specs 154 155 156 157 158 159 160 161 162 163 164 165 --schemes northeast spatial --no-submission
 python 24_assumptions.py --nocap          # reentrena la 82 sin el tope de 1.000 M (~1 min)
 python 25_criteria_vs_kaggle.py
+# Ronda 9 (redes y mezclas), en este orden:
+python 04_train_models.py --specs 168 169 170 --schemes northeast spatial
+python 17_tune_families.py --spec 169 --n-trials 20 --objective spatial   # ~17 min
+python 04_train_models.py --specs 171 --schemes northeast spatial
+python 06_ensemble.py --number 172 --how weighted --weights 0.7 0.3 --models     127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix     171_quantile_net_pt_core_coords_by_type_q70_ridge_nocoords_tuned   # y 173-176
+python 27_net_table.py --models 148 168 169 170 171 152 172 173 174 175 176
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -281,7 +288,16 @@ Cifras en millones de pesos.
 | `165_boosting_pt_core_coords_by_type_per_m2_q70_ridge` | 42 | – | 126.7 | – | 159.3 | 157.4 | -59.9 | 49% |
 | `166_stack_lineal_mediana_3` | – | – | – | – | – | 169.9 | – | – |
 | `167_stack_lgbm_l1_3` | – | – | – | – | – | 178.0 | – | – |
+| `168_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords_s10` | 35 | – | 137.3 | – | 149.4 | 148.0 | -46.0 | 51% |
+| `169_quantile_net_pt_core_coords_by_type_q70_ridge_nocoords` | 42 | – | 136.7 | – | 147.8 | 146.1 | -41.5 | 52% |
 | `16_boosting_full_coords_by_type_level` | 48 | 90.8 | 144.5 | 171.2 | 173.0 | 171.5 | -109.8 | 36% |
+| `170_quantile_net_ext_core_coords_by_type_q70_wide_embnet_nocoords` | 803 | – | 143.6 | – | 154.2 | 152.8 | -51.7 | 49% |
+| `171_quantile_net_pt_core_coords_by_type_q70_ridge_nocoords_tuned` | 42 | – | 132.4 | – | 152.3 | 150.7 | -61.3 | 47% |
+| `172_ensemble_w70_30_2` | – | – | 126.6 | – | 154.5 | 152.7 | -61.5 | 48% |
+| `173_ensemble_w60_40_2` | – | – | 126.9 | – | 153.8 | 152.0 | -61.5 | 48% |
+| `174_ensemble_w50_50_2` | – | – | 127.4 | – | 153.2 | 151.5 | -61.4 | 48% |
+| `175_ensemble_w60_20_20_3` | – | – | 127.1 | – | 153.3 | 151.5 | -59.5 | 49% |
+| `176_ensemble_w50_25_25_3` | – | – | 127.8 | – | 152.6 | 150.9 | -59.0 | 48% |
 | `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | 174.9 | 173.3 | -116.2 | 35% |
 | `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | 189.9 | 188.3 | -134.0 | 34% |
 | `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 144.1 | 174.5 | 173.2 | 171.4 | -115.9 | 35% |
@@ -745,6 +761,41 @@ precios de las otras particiones. Por eso no se guarda como `mae_spatial` de 166
 - **g. Tope:** 88 predicciones de la 83 en el test quedan a menos de 5 % de 1.650 M (66 de
   la 127, 138 de la 152). En el holdout, el 1,7 % de las filas validadas tiene un precio de
   1.567 M o más.
+
+### Ronda 9: redes para la mezcla
+
+Criterio: la validación espacial, que acertó con la red 148 (Kaggle 157,1 frente a 137,6
+espacial y 148,2 ponderado; el ponderado fue optimista en 9 M con ella). Cifras de
+`views/round9_nets.csv` (`27_net_table.py`). Ninguna fila tiene la validación aleatoria.
+
+| Fila | Red | Espacial | Ponderado | Media test | Corr. 148 | Corr. 127 |
+|---|---|---:|---:|---:|---:|---:|
+| 148 | referencia (5 semillas) | 137,6 | 148,2 | 875 | 1,000 | 0,962 |
+| 168 | 1a. 10 semillas | 137,3 | 148,0 | 877 | 0,999 | 0,963 |
+| 169 | 1b. área y baños del mismo punto | 136,7 | 146,1 | 872 | 0,991 | 0,966 |
+| 171 | 1c. 169 sintonizada, 5 semillas | 132,4† | 150,7 | 858 | 0,987 | 0,968 |
+| 170 | 2. una capa de 512, red de texto en lugar del ridge | 143,6 | 152,8 | 868 | 0,960 | 0,937 |
+
+† La sintonización (20 evaluaciones con una semilla, Optuna TPE) escogió el mínimo de esas
+mismas particiones espaciales: la cifra es optimista. Ganó una red de tres capas (512, 256 y
+128), dropout 0,24, tasa 0,0094 y regularización 7e-5. Parte de la mejora es nivel: el
+sesgo espacial baja de +59 a +44 y la media en test, de 875 a 858.
+
+Mezclas con pesos fijos (`06_ensemble.py`), boosting 127 con la 171 y la 170:
+
+| Fila | Pesos 127 / 171 / 170 | Espacial | Ponderado | Media test | Corr. entre componentes | Δ esp. frente a 152 |
+|---|---|---:|---:|---:|---:|---:|
+| 152 | 70 / 148 al 30 | 127,6 | 151,7 | 877 | 0,962 | |
+| 172 | 70 / 30 / – | 126,6 | 152,7 | 872 | 0,968 | −1,0 |
+| 173 | 60 / 40 / – | 126,9 | 152,0 | 870 | 0,968 | −0,8 |
+| 174 | 50 / 50 / – | 127,4 | 151,5 | 868 | 0,968 | −0,3 |
+| 175 | 60 / 20 / 20 | 127,1 | 151,5 | 872 | 0,953 | −0,6 |
+| 176 | 50 / 25 / 25 | 127,8 | 150,9 | 870 | 0,953 | +0,1 |
+
+Ninguna mezcla supera a la 152 en la espacial por más de 2 M. La red sintonizada mejora
+sola, pero se parece más al boosting (correlación de 0,968 frente a 0,962) y la mezcla
+gana poco. La segunda red sí es distinta (0,937 con el 127), pero es peor sola, y en la
+mezcla a tres no mejora lo que logra la 172.
 
 ### Calibración de nivel (no es un modelo)
 

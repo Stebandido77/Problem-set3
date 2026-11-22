@@ -84,7 +84,16 @@ Cifras en millones de pesos.
 | `165_boosting_pt_core_coords_by_type_per_m2_q70_ridge` | 42 | – | 126.7 | – | 159.3 | 157.4 | -59.9 | 49% |
 | `166_stack_lineal_mediana_3` | – | – | – | – | – | 169.9 | – | – |
 | `167_stack_lgbm_l1_3` | – | – | – | – | – | 178.0 | – | – |
+| `168_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords_s10` | 35 | – | 137.3 | – | 149.4 | 148.0 | -46.0 | 51% |
+| `169_quantile_net_pt_core_coords_by_type_q70_ridge_nocoords` | 42 | – | 136.7 | – | 147.8 | 146.1 | -41.5 | 52% |
 | `16_boosting_full_coords_by_type_level` | 48 | 90.8 | 144.5 | 171.2 | 173.0 | 171.5 | -109.8 | 36% |
+| `170_quantile_net_ext_core_coords_by_type_q70_wide_embnet_nocoords` | 803 | – | 143.6 | – | 154.2 | 152.8 | -51.7 | 49% |
+| `171_quantile_net_pt_core_coords_by_type_q70_ridge_nocoords_tuned` | 42 | – | 132.4 | – | 152.3 | 150.7 | -61.3 | 47% |
+| `172_ensemble_w70_30_2` | – | – | 126.6 | – | 154.5 | 152.7 | -61.5 | 48% |
+| `173_ensemble_w60_40_2` | – | – | 126.9 | – | 153.8 | 152.0 | -61.5 | 48% |
+| `174_ensemble_w50_50_2` | – | – | 127.4 | – | 153.2 | 151.5 | -61.4 | 48% |
+| `175_ensemble_w60_20_20_3` | – | – | 127.1 | – | 153.3 | 151.5 | -59.5 | 49% |
+| `176_ensemble_w50_25_25_3` | – | – | 127.8 | – | 152.6 | 150.9 | -59.0 | 48% |
 | `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | 174.9 | 173.3 | -116.2 | 35% |
 | `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | 189.9 | 188.3 | -134.0 | 34% |
 | `19_boosting_rich_coords_by_type_per_m2` | 72 | 89.4 | 144.1 | 174.5 | 173.2 | 171.4 | -115.9 | 35% |
