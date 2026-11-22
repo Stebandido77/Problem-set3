@@ -555,6 +555,13 @@ ROUND_10B = []
 if "knn_q70" in load_best_params():
     ROUND_10B.append(Spec("knn", "pt_core_coords", "by_type_q70_tuned", by_type=True,
                           tuned=True, tune_key="knn_q70"))
+# Etapa 4: la receta del 125 (base del 127) con cuantiles bajos, para la regla de compra
+# (35_purchase_rule.py). Solo se evalúan en la validación espacial; no son envíos.
+ROUND_11_START = 190
+ROUND_11 = [Spec("boosting", "pt_core_coords", f"by_type_level_q{q}_ridge_nocoords_s10",
+                 drop_coords=True, n_seeds=10, text_sources=("ridge",), target="level",
+                 by_type=True, params=quantile_loss(q / 100))
+            for q in (20, 30, 50)]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -574,7 +581,8 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_8, start=ROUND_8_START)),
                   **dict(enumerate(ROUND_9, start=ROUND_9_START)),
                   **dict(enumerate(ROUND_10, start=ROUND_10_START)),
-                  **dict(enumerate(ROUND_10B, start=ROUND_10B_START))}
+                  **dict(enumerate(ROUND_10B, start=ROUND_10B_START)),
+                  **dict(enumerate(ROUND_11, start=ROUND_11_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
