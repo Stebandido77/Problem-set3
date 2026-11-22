@@ -1,29 +1,49 @@
 #!/usr/bin/env bash
-# Reproduce todo el flujo, de los datos crudos a los envíos de Kaggle.
+# Ruta principal: de los datos crudos a los envíos finales y al material de las dos
+# presentaciones. Reproduce los modelos ingenuos, el mejor modelo de cada familia, la mezcla
+# final (152) y todas las figuras y tablas de document/. Los demás experimentos (rondas 1
+# a 10) están en EXPERIMENTOS.md, con sus comandos y su tabla de resultados.
+#
+# Uso:  bash run_all.sh                    # usa las descargas externas ya versionadas
+#       bash run_all.sh --download         # vuelve a descargar OSM y los datos de Bogotá
+# Tarda unas dos horas y media en 16 núcleos (ver README, "Cómo reproducir").
 set -euo pipefail
 cd "$(dirname "$0")/scripts"
-python 01_download_osm.py     # requiere internet; se puede omitir si ya existe osm_pois.csv
-python 11_download_bogota.py  # requiere internet la primera vez; caché en stores/external
-python 02_build_features.py
-python 03_naive_baselines.py
-python 04_train_models.py
-python 06_ensemble.py --number 30 --how median --models 17_boosting_full_coords_by_type_per_m2 04_elastic_net_full 18_random_forest_full_by_type_per_m2
-python 06_ensemble.py --number 31 --how mean --models 17_boosting_full_coords_by_type_per_m2 04_elastic_net_full 18_random_forest_full_by_type_per_m2
-# Ronda 2: ensambles y versiones escaladas (calibración de nivel, fuera de la tabla principal).
-python 06_ensemble.py --number 55 --how mean --models 54_en_boosting_core_coords_residual_q65 48_boosting_core_coords_by_type_level_trunc
-python 06_ensemble.py --number 56 --how mean --models 54_en_boosting_core_coords_residual_q65 48_boosting_core_coords_by_type_level_trunc 04_elastic_net_full
-python 06_ensemble.py --number 63 --how mean --models 54_en_boosting_core_coords_residual_q65 62_boosting_core_coords_by_type_level_trunc_up
-# El 32 y el 60 escalan 10_boosting_full_coords.csv, el envío sin OSM que se subió a Kaggle.
-# En un clon sin envíos, 04 escribe ese nombre con la versión con OSM y estos dos cambian.
-python 09_level_calibration.py --number 32 --factors 1.15 --model none --submission 10_boosting_full_coords
-python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 --submission 54_en_boosting_core_coords_residual_q65
-python 09_level_calibration.py --number 60 --factors 1.20 --model none --submission 10_boosting_full_coords
-# Ronda 3b: sintonización en el holdout ponderado (antes de 04 si se reproduce desde cero,
-# porque 04 lee best_params.json) y mezclas con pesos fijos con la red cuantílica.
-#   python 05_tune_models.py --spec 65 --n-iter 40 --n-jobs 4
-#   python 05_tune_models.py --spec 4 --n-iter 15 --n-jobs 8
-python 06_ensemble.py --number 84 --how weighted --weights 0.9 0.1 --models 83_boosting_ext_core_coords_by_type_level_q70_ridge_s10 78_quantile_net_core_coords_by_type_q70
-python 06_ensemble.py --number 85 --how weighted --weights 0.8 0.2 --models 83_boosting_ext_core_coords_by_type_level_q70_ridge_s10 78_quantile_net_core_coords_by_type_q70
-python 07_results_table.py
-python 12_text_report.py --svd 20
-# Opcional y lento (~5 min por esquema): python 08_calibrate_holdout.py
+PYTHON="${PYTHON:-python}"
+
+# 1. Fuentes externas. Sin --download se arman con lo que ya está en stores/processed.
+if [[ "${1:-}" == "--download" ]]; then
+    "$PYTHON" 01_download_osm.py       # OpenStreetMap (Overpass); requiere internet
+    "$PYTHON" 11_download_bogota.py    # estrato y valor del terreno por manzana
+    "$PYTHON" 16_download_lots.py      # lote, pisos y área construida del catastro
+else
+    "$PYTHON" 01_download_osm.py --cache-only
+fi
+
+# 2. Predictores, modelos ingenuos y embeddings del texto (los usa el bosque 114).
+"$PYTHON" 02_build_features.py
+"$PYTHON" 03_naive_baselines.py
+"$PYTHON" 13_text_embeddings.py
+
+# 3. Mejor especificación de cada familia: lineal 108, elastic net 104, CART 105,
+#    bosque 114, boosting 83 y 125, red 148. La 127 es la 125 con la regla de anuncios
+#    repetidos y la 152 mezcla la 127 (70 %) con la red 148 (30 %).
+"$PYTHON" 04_train_models.py --specs 104 105 108 114 83 125 148 \
+    --schemes random_twins spatial northeast
+"$PYTHON" 20_twin_rules.py --rules mix --numbers 127 \
+    --model 125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10
+"$PYTHON" 06_ensemble.py --number 152 --how weighted --weights 0.7 0.3 --models \
+    127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix \
+    148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
+
+# 4. La receta de la 125 con cuantiles 0,20, 0,30 y 0,50 para la regla de compra.
+"$PYTHON" 04_train_models.py --specs 190 191 192 --schemes spatial --no-submission
+"$PYTHON" 07_results_table.py
+
+# 5. Figuras y tablas de las presentaciones (views/) y las presentaciones (document/).
+"$PYTHON" 31_data_overview.py
+"$PYTHON" 33_validation_schemes.py
+"$PYTHON" 32_algorithm_comparison.py
+"$PYTHON" 34_best_model_errors.py
+"$PYTHON" 35_purchase_rule.py
+"$PYTHON" 36_build_presentations.py

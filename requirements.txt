@@ -12,3 +12,4 @@ cmaes>=0.11
 catboost>=1.2
 xgboost>=2.0
 quantile-forest>=1.5
+python-pptx>=1.0

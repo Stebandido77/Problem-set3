@@ -12,3 +12,6 @@ stores/processed/text_cache/
 stores/processed/optuna_round5.db
 stores/processed/optuna_round6.db
 stores/processed/optuna_round7.db
+
+# Corrida de verificación desde cero (run_all en un clon limpio)
+_clean_run/
