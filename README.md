@@ -35,7 +35,10 @@ destruye capital?
 │   ├── 16_download_lots.py    lote, pisos y área construida del catastro (ronda 4)
 │   ├── 17_tune_families.py    Optuna TPE para bosque, elastic net y CART cuantílicos (ronda 5)
 │   ├── 18_family_table.py     tabla por familia: versión anterior, nueva y boosting 83 (ronda 5)
-│   └── 19_genetic_search.py   NSGA-II (genético) para el bosque cuantílico (ronda 6)
+│   ├── 19_genetic_search.py   NSGA-II (genético) para el bosque cuantílico (ronda 6)
+│   ├── 23_error_anatomy.py    error de la 83 y la 127 por segmento y los 50 peores (ronda 8)
+│   ├── 24_assumptions.py      nivel por segmento, apilamiento y tope de precio (ronda 8)
+│   └── 25_criteria_vs_kaggle.py  ponderado y espacial frente al puntaje público (ronda 8)
 ├── stores/
 │   ├── raw/                   datos de Kaggle (train, test, plantilla de envío)
 │   ├── external/              caché de descargas de Bogotá (no se versiona)
@@ -84,6 +87,11 @@ python 19_genetic_search.py --spec 107 --sampler nsga2 --n-trials 120   # ~60 mi
 python 19_genetic_search.py --spec 107 --confirm
 python 04_train_models.py --specs 112 113 114 115 --schemes northeast spatial chapinero
 python 06_ensemble.py --number 116 --how weighted --weights 0.8 0.2 --models     83_boosting_ext_core_coords_by_type_level_q70_ridge_s10     114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords   # y 117-119
+# Ronda 8 (revisión de supuestos), en este orden:
+python 23_error_anatomy.py
+python 04_train_models.py --specs 154 155 156 157 158 159 160 161 162 163 164 165 --schemes northeast spatial --no-submission
+python 24_assumptions.py --nocap          # reentrena la 82 sin el tope de 1.000 M (~1 min)
+python 25_criteria_vs_kaggle.py
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -221,10 +229,58 @@ Cifras en millones de pesos.
 | `118_ensemble_w60_40_2` | – | – | 134.1 | 142.6 | 157.4 | 155.7 | -51.4 | 51% |
 | `119_ensemble_w50_50_2` | – | – | 135.3 | 143.1 | 157.9 | 156.2 | -50.4 | 52% |
 | `11_neural_net_full` | 46 | 146.8 | 196.6 | 237.2 | 194.8 | 193.0 | -44.9 | 46% |
+| `120_boosting_pt_core_coords_by_type_level_q70_ridge` | 42 | 95.2 | 129.2 | 140.4 | 157.8 | 155.9 | -53.6 | 51% |
+| `121_boosting_ext_core_coords_by_type_level_q70_ridge_nocoords` | 35 | 98.6 | 130.7 | 143.1 | 158.0 | 156.4 | -58.7 | 49% |
+| `122_boosting_ext_core_coords_by_type_level_q70_ridge_coords3` | 35 | 97.0 | 132.6 | 143.1 | 157.6 | 155.8 | -55.5 | 50% |
+| `123_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords` | 42 | 96.7 | 127.7 | 139.8 | 158.0 | 156.1 | -60.0 | 49% |
+| `124_boosting_pt_core_coords_by_type_level_q70_ridge_s10` | 42 | 94.4 | 128.4 | 139.9 | 157.3 | 155.4 | -54.8 | 51% |
+| `125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10` | 42 | 95.9 | 127.1 | – | 157.6 | 155.7 | -60.9 | 49% |
+| `126_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_median` | – | 82.9 | 127.1 | – | 157.5 | 155.5 | -62.2 | 48% |
+| `127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix` | – | 89.0 | 127.0 | – | 157.4 | 155.5 | -61.6 | 49% |
+| `128_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_avg` | – | 96.7 | 127.5 | – | 157.9 | 156.0 | -60.9 | 49% |
+| `129_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix_avg` | – | 89.4 | 127.2 | – | 157.6 | 155.7 | -61.6 | 49% |
 | `12_boosting_full_coords_weighted` | 48 | 112.7 | 150.1 | 176.5 | 181.2 | 179.1 | -121.0 | 36% |
+| `130_linear_ext_core_coords_by_type_level_q70_ridge_oof_nogeo` | 35 | 139.3 | 156.3 | 151.6 | 167.1 | 165.5 | -62.8 | 49% |
+| `131_elastic_net_ext_core_coords_by_type_level_q70_ridge_tuned_oof_nogeo` | 35 | 139.9 | 156.8 | 151.3 | 167.1 | 165.5 | -62.8 | 49% |
+| `132_boosting_ext_core_coords_by_type_level_q55_ridge_pw2` | 35 | – | – | – | 158.7 | 157.0 | -78.6 | 43% |
+| `133_boosting_ext_core_coords_by_type_level_q60_ridge_pw2` | 35 | – | – | – | 158.4 | 156.7 | -68.7 | 47% |
+| `134_boosting_ext_core_coords_by_type_level_q65_ridge_pw2` | 35 | – | 132.7 | – | 158.6 | 156.8 | -59.9 | 49% |
+| `135_boosting_ext_core_coords_by_type_level_q70_ridge_pw2` | 35 | – | – | – | 160.2 | 158.5 | -48.6 | 52% |
+| `136_boosting_ext_core_coords_by_type_level_q55_ridge_pw4` | 35 | – | – | – | 159.8 | 158.1 | -73.8 | 45% |
+| `137_boosting_ext_core_coords_by_type_level_q60_ridge_pw4` | 35 | – | – | – | 160.1 | 158.4 | -61.7 | 49% |
+| `138_boosting_ext_core_coords_by_type_level_q65_ridge_pw4` | 35 | – | 138.1 | – | 161.3 | 159.5 | -51.0 | 51% |
+| `139_boosting_ext_core_coords_by_type_level_q70_ridge_pw4` | 35 | – | – | – | 163.3 | 161.5 | -40.3 | 54% |
 | `13_random_forest_full_weighted` | 46 | 107.1 | 151.2 | 179.2 | 193.9 | 191.8 | -137.8 | 34% |
+| `140_boosting_ext_core_coords_by_type_level_q55_ridge_os2` | 35 | – | – | – | 158.0 | 156.4 | -74.2 | 44% |
+| `141_boosting_ext_core_coords_by_type_level_q60_ridge_os2` | 35 | – | 127.3 | – | 157.8 | 156.1 | -68.2 | 46% |
+| `142_boosting_ext_core_coords_by_type_level_q65_ridge_os2` | 35 | – | – | – | 157.9 | 156.2 | -57.2 | 49% |
+| `143_boosting_ext_core_coords_by_type_level_q70_ridge_os2` | 35 | – | – | – | 159.5 | 157.7 | -46.3 | 52% |
+| `144_boosting_ext_core_coords_by_type_level_q55_ridge_os3` | 35 | – | 125.0 | – | 158.7 | 156.9 | -72.3 | 45% |
+| `145_boosting_ext_core_coords_by_type_level_q60_ridge_os3` | 35 | – | – | – | 158.9 | 157.1 | -61.9 | 48% |
+| `146_boosting_ext_core_coords_by_type_level_q65_ridge_os3` | 35 | – | – | – | 159.2 | 157.4 | -53.8 | 50% |
+| `147_boosting_ext_core_coords_by_type_level_q70_ridge_os3` | 35 | – | – | – | 161.8 | 159.9 | -41.5 | 53% |
+| `148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords` | 35 | 118.0 | 137.6 | 141.6 | 149.5 | 148.2 | -47.0 | 51% |
+| `149_boosting_ext_core_coords_by_type_level_q70_ridge_tfidfnet` | 35 | – | – | – | 157.3 | 155.6 | -56.2 | 51% |
 | `14_boosting_full_coords_by_type` | 48 | 90.5 | 142.7 | 177.6 | 175.6 | 174.1 | -116.5 | 35% |
+| `150_ensemble_w70_30_2` | – | – | 131.1 | 139.3 | 153.1 | 151.5 | -52.9 | 51% |
+| `151_ensemble_w50_50_2` | – | – | 132.0 | 138.6 | 151.4 | 149.9 | -51.2 | 51% |
+| `152_ensemble_w70_30_2` | – | 95.5 | 127.6 | – | 153.5 | 151.7 | -57.2 | 50% |
+| `153_ensemble_w50_50_2` | – | 101.1 | 129.4 | – | 151.6 | 150.0 | -54.3 | 50% |
+| `154_boosting_ext_core_coords_by_type_level_q60_ridge` | 35 | – | 126.1 | – | 157.1 | 155.5 | -74.5 | 45% |
+| `155_boosting_ext_core_coords_by_type_level_q65_ridge` | 35 | – | 126.7 | – | 156.6 | 154.9 | -65.8 | 47% |
+| `156_boosting_ext_core_coords_by_type_level_q75_ridge` | 35 | – | 138.7 | – | 158.8 | 157.1 | -43.7 | 53% |
+| `157_boosting_ext_core_coords_by_type_level_q80_ridge` | 35 | – | 147.6 | – | 162.1 | 160.3 | -25.8 | 58% |
+| `158_boosting_ext_core_coords_by_type_level_q70_ridge_local_ne` | 35 | – | 160.6 | – | 165.0 | 163.3 | -60.4 | 48% |
+| `159_boosting_ext_core_coords_by_type_level_q70_ridge_local_3km` | 35 | – | 191.7 | – | 169.0 | 167.2 | -65.9 | 48% |
 | `15_random_forest_full_by_type` | 46 | 91.5 | 146.8 | 177.5 | 193.7 | 192.0 | -137.7 | 34% |
+| `160_boosting_ext_core_coords_by_type_level_q70_ridge_local_5km` | 35 | – | 154.4 | – | 160.7 | 159.1 | -61.9 | 49% |
+| `161_boosting_ext_core_coords_by_type_level_q70_ridge_local_8km` | 35 | – | 140.4 | – | 158.1 | 156.4 | -56.3 | 50% |
+| `162_boosting_ext_core_coords_by_type_level_q70_ridge_notwins` | 35 | – | 132.7 | – | 157.9 | 156.2 | -54.6 | 50% |
+| `163_boosting_ext_core_coords_by_type_level_q70_ridge_twinweight` | 35 | – | 131.7 | – | 157.3 | 155.6 | -57.3 | 50% |
+| `164_boosting_ext_core_coords_by_type_level_q70_ridge_trim` | 35 | – | 133.0 | – | 158.7 | 157.0 | -58.8 | 49% |
+| `165_boosting_pt_core_coords_by_type_per_m2_q70_ridge` | 42 | – | 126.7 | – | 159.3 | 157.4 | -59.9 | 49% |
+| `166_stack_lineal_mediana_3` | – | – | – | – | – | 169.9 | – | – |
+| `167_stack_lgbm_l1_3` | – | – | – | – | – | 178.0 | – | – |
 | `16_boosting_full_coords_by_type_level` | 48 | 90.8 | 144.5 | 171.2 | 173.0 | 171.5 | -109.8 | 36% |
 | `17_boosting_full_coords_by_type_per_m2` | 48 | 90.7 | 142.6 | 169.9 | 174.9 | 173.3 | -116.2 | 35% |
 | `18_random_forest_full_by_type_per_m2` | 46 | 91.7 | 146.8 | 172.2 | 189.9 | 188.3 | -134.0 | 34% |
@@ -339,6 +395,42 @@ como se subió (los envíos 10 y 11, sin OSM), con `08_calibrate_holdout.py`
 | `114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords` | 158.9 | 161.3 | 147.5 |
 | `105_cart_ext_core_coords_by_type_level_q70_ridge_tuned` | 177.5 | 170.3 | 169.3 |
 | `108_linear_ext_core_coords_splines_by_type_level_q70_ridge_oof` | 180.5 | 167.6 | 157.8 |
+| `148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords` | 157.1 | 149.5 | 141.6 |
+| `152_ensemble_w70_30_2` (127 al 70 %, red 148 al 30 %) | **148.2** | 153.5 | sin calcular |
+
+**Mejor envío: `152_ensemble_w70_30_2`**, la mezcla del boosting 127 (70 %) y la red 148
+(30 %), con 148,2 M en el tablero público, 3,9 M mejor que la 83 (152,1).
+
+**Ponderado y espacial frente a Kaggle** (`25_criteria_vs_kaggle.py`,
+`views/criteria_vs_kaggle.csv`), en los 12 envíos que tienen los tres números:
+
+| Envío | Kaggle | Ponderado | Espacial |
+|---|---:|---:|---:|
+| 152 mezcla 127/148 | 148,2 | 151,7 | 127,6 |
+| 83 boosting | 152,1 | 154,8 | 131,5 |
+| 75 boosting | 153,1 | 155,6 | 133,0 |
+| 98 boosting TPE | 153,4 | 152,9 | 128,6 |
+| 148 red | 157,1 | 148,2 | 137,6 |
+| 114 bosque | 158,9 | 159,6 | 143,8 |
+| 65 boosting | 160,9 | 161,3 | 148,9 |
+| 53 boosting | 161,7 | 161,1 | 142,5 |
+| 54 híbrido | 173,3 | 156,4 | 142,7 |
+| 105 CART | 177,5 | 168,7 | 159,8 |
+| 108 lineal | 180,5 | 166,0 | 164,1 |
+| 49 híbrido | 184,1 | 162,3 | 137,4 |
+
+| Criterio | Spearman con Kaggle | Pares bien ordenados | Brecha media frente a Kaggle |
+|---|---:|---:|---:|
+| Ponderado | 0,83 | 80 % | −5,2 |
+| Espacial | 0,73 | 80 % | −21,9 |
+
+El ponderado ordena algo mejor y acierta el nivel; la espacial es optimista en unos 22 M.
+Los dos ordenan bien el mismo 80 % de los pares. Los errores del ponderado son modelos que
+estiran la cola alta: la red 148 (148,2 frente a 157,1) y los híbridos 54 y 49. El holdout
+entrena solo con precios de hasta 1.000 M, y el 18 % de su validación pasa de ese tope.
+Ahí gana el modelo que extrapola hacia arriba, una ventaja que en el test, con el
+entrenamiento hasta 1.650 M, vale mucho menos. La 82 entrenada sin ese tope baja de 155,4 a
+138,6 M en el ponderado (`views/round8_ceiling.csv`).
 
 Con el holdout ponderado (`mae_weighted`) frente a Kaggle: boosting 83 154,8 contra 152,1 y
 bosque 114 159,6 contra 158,9 (acierta); CART 105 168,7 contra 177,5 y lineal 108 166,0
@@ -597,6 +689,62 @@ acierte con la red 148, que aún no tiene puntaje público.
 **Conclusión antes de las mezclas:** nada supera a la 83 por más de 2 M en los dos criterios. La 127 gana 4,5 M en
 la espacial y empata en el ponderado (+0,7). La red 148 gana 6,6 M en el ponderado y pierde
 6,1 M en la espacial.
+
+### Ronda 8: anatomía del error y revisión de supuestos
+
+**Dónde está el error de la 83** (`23_error_anatomy.py`, `views/error_anatomy_*`). Aporte al
+error absoluto total, ponderado / espacial:
+
+| Segmento | Filas (peso) | Aporte | MAE | Sesgo |
+|---|---:|---:|---:|---:|
+| Decil 10 del precio observado | 10 % / 10 % | 35 % / 18 % | 562 / 246 | −562 / −215 |
+| Casas | 13 % / 25 % | 22 % / 34 % | 268 / 183 | −154 / +46 |
+| 200 m² o más | 12 % / 13 % | 25 % / 19 % | 332 / 193 | −260 / +42 |
+
+La 127 repite el mismo patrón. Los 50 peores del ponderado pasan todos de 1.000 M, el tope
+del ajuste del holdout. 22 de ellos son anuncios de Rentahouse, muchos con la descripción
+repetida.
+
+**Pruebas sobre la receta de la 83** (`views/round8_summary.csv`; las de una semilla se
+comparan también con la 82). Diferencias en millones; menos de 2 M es ruido:
+
+| Prueba | Fila | Ponderado | Espacial | Δ ponderado | Δ espacial |
+|---|---|---:|---:|---:|---:|
+| 83, referencia | 83 | 154,8 | 131,5 | | |
+| 82, una semilla | 82 | 155,4 | 132,6 | +0,6 | +1,1 |
+| a. cuantil 0,60 / 0,65 | 154 / 155 | 155,5 / 154,9 | 126,1 / 126,7 | +0,6 / +0,1 | −5,4 / −4,8 |
+| a. cuantil 0,75 / 0,80 | 156 / 157 | 157,1 / 160,4 | 138,7 / 147,6 | +2,2 / +5,5 | +7,3 / +16,1 |
+| a. cuantil por tercil de precio predicho | | 153,7 | 126,1 | −1,1 | −5,4 |
+| a. cuantil por estrato | | 157,1 | 125,9 | +2,3 | −5,6 |
+| b. apartamentos de estrato 5 y 6 del nororiente | 158 | 163,3 | 160,6 | +8,4 | +29,1 |
+| b. radio de 3 / 5 / 8 km | 159–161 | 167,2 / 159,1 / 156,4 | 191,7 / 154,4 / 140,4 | +12,4 / +4,3 / +1,5 | +60,3 / +22,9 / +9,0 |
+| c. sin gemelos / gemelos a peso 1/n | 162 / 163 | 156,2 / 155,6 | 132,7 / 131,7 | +1,4 / +0,7 | +1,2 / +0,2 |
+| d. sin precio por m² fuera de p1–p99 | 164 | 157,0 | 133,0 | +2,2 | +1,5 |
+| e. precio por m² con el área del mismo punto | 165 | 157,4 | 126,7 | +2,6 | −4,8 |
+| f. mezcla 70/30, 83 y red 148 | 150 | 151,5 | 131,1 | −3,4 | −0,4 |
+| f. apilamiento lineal, ajustado en la espacial | 166 | 169,9 | 119,5* | +15,1 | −11,9* |
+| f. apilamiento LightGBM, ajustado en la espacial | 167 | 178,0 | 120,2* | +23,2 | −11,3* |
+
+\* Espacial del apilamiento escogido con cuatro particiones espaciales y aplicado a la quinta.
+Es algo optimista: sus entradas son predicciones espaciales de modelos que sí vieron los
+precios de las otras particiones. Por eso no se guarda como `mae_spatial` de 166 y 167.
+
+- **a. Nivel:** la espacial pide el cuantil 0,60 en casi todos los segmentos, y 0,65 en el
+  estrato 6. El ponderado pide de 0,60 a 0,80, más alto en el tercil caro. Los dos criterios no se ponen de acuerdo sobre
+  el nivel, y escoger el cuantil por segmento no resuelve ese desacuerdo.
+- **b, c, d:** entrenar con toda Bogotá, con los gemelos y sin limpiar los extremos se
+  sostiene.
+- **e:** el precio por m² con el área recuperada baja la espacial porque baja el nivel
+  (sesgo de +30 frente a +43), no porque ordene mejor.
+- **f, apilamiento:** si el segundo nivel se ajusta dentro del holdout ponderado, gana entre
+  9 y 15 M. Pero aprende a corregir el tope de 1.000 M del holdout (intercepto de −132 M), y
+  eso no se puede llevar al test (los interceptos por zona van de −111 a −143 M,
+  `views/round8_stacking.csv`). Ajustado en la espacial, que es lo único que se puede
+  enviar, baja el nivel del test a 788 M y pierde 15 M en el ponderado. Los envíos 166 y 167
+  quedan en `obsoletos/` y no se recomiendan.
+- **g. Tope:** 88 predicciones de la 83 en el test quedan a menos de 5 % de 1.650 M (66 de
+  la 127, 138 de la 152). En el holdout, el 1,7 % de las filas validadas tiene un precio de
+  1.567 M o más.
 
 ### Calibración de nivel (no es un modelo)
 
