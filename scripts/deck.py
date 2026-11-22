@@ -28,9 +28,13 @@ MUTED = RGBColor(0x66, 0x66, 0x66)
 ACCENT = RGBColor(0xD5, 0x5E, 0x00)   # el color del boosting en plot_style
 
 
-def new_deck():
+def new_deck(title, author):
+    """Presentación vacía 16:9 con título y autor en las propiedades del archivo."""
     deck = Presentation()
     deck.slide_width, deck.slide_height = WIDTH, HEIGHT
+    properties = deck.core_properties
+    properties.title, properties.author, properties.last_modified_by = title, author, author
+    properties.comments = ""
     return deck
 
 

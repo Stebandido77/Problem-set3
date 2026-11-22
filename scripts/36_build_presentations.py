@@ -5,7 +5,7 @@ validación). Se arman con python-pptx a partir de las figuras y tablas de views
 está instalado. Las cifras de los títulos salen de los CSV; ninguna se escribe a mano.
 
 Uso: python 36_build_presentations.py [--preview]   (--preview guarda cada diapositiva
-     como PNG en .claude/logs/preview/ para revisarla; esa carpeta no se versiona)
+     como PNG en document/_preview/ para revisarla; esa carpeta no se versiona)
 """
 
 import argparse
@@ -20,7 +20,7 @@ from plot_style import FAMILY_COLORS, es_number
 from utils import ROOT, VIEWS_DIR
 
 DOCUMENT_DIR = ROOT / "document"
-PREVIEW_DIR = ROOT / ".claude" / "logs" / "preview"
+PREVIEW_DIR = ROOT / "document" / "_preview"
 TEAM = "06"
 BEST = "152_ensemble_w70_30_2"
 NBSP = " "   # espacio que no se corta entre la cifra y su unidad
@@ -99,7 +99,7 @@ def family_rows(t):
 
 
 def build_compare(t):
-    deck = dk.new_deck()
+    deck = dk.new_deck("Comparación de modelos", f"Equipo {TEAM}")
     schemes, corr = t["schemes"], t["corr"]
     best, boost = kaggle_of(t, 152), kaggle_of(t, 83)
 
@@ -222,8 +222,8 @@ def build_compare(t):
     page = dk.slide(
         deck, "La validación espacial premia bajar el nivel de las predicciones; el tablero no",
         "Qué falla en la espacial. Ordena razonablemente, pero prefiere modelos con un nivel "
-        "más bajo que el que premia Kaggle: el cuantil 0,60 le gana al 0,70 en la espacial y "
-        "pierde en el ponderado y en el tablero. Por eso no escogimos la 186, que mejora la "
+        "más bajo que el que premia Kaggle: el cuantil 0,60 le gana al 0,70 en la espacial y no "
+        "en el ponderado, y en el tablero el 0,65 (envío 53) quedó detrás del 0,70 (65). Por eso no escogimos la 186, que mejora la "
         "espacial casi solo por bajar el nivel. Usamos la espacial para ordenar modelos de "
         "nivel parecido y el ponderado y Kaggle para el nivel.")
     dk.figure(page, "validation_level.png", top=dk.top(page))
@@ -243,7 +243,13 @@ def build_compare(t):
     page = dk.slide(
         deck, "Conclusión: el boosting con la receta común es la base y la red aporta en la "
               "cola alta",
-        "Cierre. Resumimos qué aprendimos al comparar familias y esquemas de validación.")
+        "Cierre. El boosting cuantílico por tipo es la base porque ordena bien los precios en "
+        "zonas que no vio. La receta común ayuda a todas las familias, pero la brecha con el "
+        "boosting se mantiene, así que la ventaja es del algoritmo. La red entra a la mezcla "
+        "porque llega a la cola alta. Para escoger modelos no confiamos en un solo esquema: "
+        "la aleatoria simple se engaña con los anuncios repetidos, la espacial premia bajar "
+        "el nivel y el holdout ponderado favorece a las redes. Por eso escogimos con los "
+        "tres y usamos Kaggle como juez final.")
     dk.bullets(page, [
         "El boosting cuantílico por tipo es la mejor familia en la validación espacial, en "
         "la aleatoria con gemelos y en Kaggle; la red solo le gana en el holdout ponderado.",
@@ -327,7 +333,7 @@ def model_diagram(page, top):
 
 
 def build_best(t):
-    deck = dk.new_deck()
+    deck = dk.new_deck("El mejor modelo y la decisión de compra", f"Equipo {TEAM}")
     best = kaggle_of(t, 152)
     over = rule_row(t, "152 (Kaggle, q0,70)", 0.0)
     q20 = rule_row(t, "q0,20", 0.0)
@@ -461,16 +467,16 @@ def build_best(t):
         r = rule_row(t, rule, discount, seg)
         rows.append([label, seg, pct(r["share_closed"]), m(r["mean_overpay"]),
                      pct(r["overpay_share_capital"], 1)])
-    apt = rule_row(t, "q0,20", 0.0, "apartamento, con área")
-    house = rule_row(t, "q0,20", 0.0, "casa, con área")
+    apt = rule_row(t, "q0,20", 0.0, "apartamento")
+    house = rule_row(t, "q0,20", 0.0, "casa")
     page = dk.slide(
         deck, "La regla que proponemos: cuantil 0,20 sin descuento, solo en apartamentos",
         "La regla por segmento. Con el cuantil 0,20 la empresa compra uno de cada tres "
         "anuncios y el sobrepago cae frente al modelo de Kaggle. En casas el sobrepago es "
         "mayor y por eso no recomendamos usar el modelo ahí. Que falte el área cambia poco la "
         "tasa de sobrepago, pero sí el error.",
-        subtitle=f"Apartamentos con área: {pct(apt['overpay_share_capital'], 1)} de sobrepago "
-                 f"sobre el capital; casas con área: {pct(house['overpay_share_capital'], 1)}")
+        subtitle=f"Apartamentos: {pct(apt['overpay_share_capital'], 1)} de sobrepago "
+                 f"sobre el capital; casas: {pct(house['overpay_share_capital'], 1)}")
     dk.table(page, rows, dk.MARGIN, dk.top(page), dk.WIDTH - 2 * dk.MARGIN,
              col_widths=[2.6, 1.9, 1.3, 1.5, 1.4], size=16, text_cols=(0, 1),
              highlight_rows=(3,))

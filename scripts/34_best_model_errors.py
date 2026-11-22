@@ -54,7 +54,7 @@ RANKED = {
         ("127 boosting q0,70", True),
     "148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords": ("148 red", True),
     BEST: ("152 mezcla (Kaggle)", True),
-    "186_ensemble_w70_30_2": ("186 mezcla*", False),
+    "186_ensemble_w70_30_2": ("186 mezcla", True),
 }
 COST_RATIOS = (1, 2, 3)
 PRICE_BINS = [0, 400, 500, 700, 900, 1200, np.inf]
@@ -330,7 +330,7 @@ def plot_ranking(table):
              "(ruta principal)")
     fig.suptitle(title, fontsize=12.5)
     fig.text(0.5, -0.1, "Validación espacial fuera de muestra. Costo = k × sobrepredicción "
-             "+ subpredicción, promedio por inmueble. * La 186 no está en la ruta principal.",
+             "+ subpredicción, promedio por inmueble.",
              ha="center", fontsize=9)
     fig.tight_layout()
     return plot_style.save(fig, "asymmetric_ranking.png")
