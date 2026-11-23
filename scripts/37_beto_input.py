@@ -26,7 +26,7 @@ def group_twins(train, folds):
     description = train["description"]
     first_fold = pd.Series(folds).groupby(description.to_numpy()).transform("first")
     has_text = description.notna() & (description.str.strip() != "")
-    return np.where(has_text, first_fold, folds)
+    return np.where(has_text, first_fold, folds).astype(int)
 
 
 def build_input(train, test):
