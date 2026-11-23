@@ -41,6 +41,11 @@ BOGOTA_LOTS_PATH = PROCESSED_DIR / "bogota_lots.csv"
 EMBEDDINGS_PATH = PROCESSED_DIR / "text_embeddings.npz"
 TEXT_CACHE_DIR = PROCESSED_DIR / "text_cache"
 EMBEDDING_DIM = 384   # dimensión de multilingual-e5-small (13_text_embeddings.py)
+# Predicción del log del precio según el texto, de BETO afinado en Kaggle con GPU
+# (scripts/beto_kaggle.py sobre la salida de 37_beto_input.py). Se versiona para que el repo
+# corra sin GPU.
+BETO_PATH = PROCESSED_DIR / "beto_predictions.csv"
+BETO_FEATURE = "txt_beto"
 
 ID_COL = "property_id"
 TARGET = "price"
@@ -141,6 +146,22 @@ def add_embeddings(*frames):
         blocks = [pd.DataFrame(stored[part][rows], columns=embedding_columns(part),
                                index=df.index) for part in ("title", "desc")]
         out.append(pd.concat([df] + blocks, axis=1))
+    return out
+
+
+def add_beto(*frames):
+    """Agrega a cada base la columna txt_beto: el log del precio que predice BETO con el
+    título y la descripción. En train es fuera de muestra con las particiones de la
+    validación espacial (los anuncios con la misma descripción, juntos); en test es el
+    promedio de los cinco modelos. Ninguna fila recibe una predicción de un modelo que vio
+    su precio; 155 filas con gemelos físicos de otra descripción (twin_groups) sí pueden
+    tener a un gemelo en el entrenamiento de su modelo."""
+    beto = pd.read_csv(BETO_PATH).set_index(ID_COL)["beto_log_price"]
+    out = []
+    for df in frames:
+        values = df[ID_COL].map(beto)
+        assert values.notna().all(), "Faltan predicciones de BETO"
+        out.append(df.assign(**{BETO_FEATURE: values.to_numpy()}))
     return out
 
 

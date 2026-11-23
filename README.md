@@ -151,6 +151,18 @@ Notas:
   `36_build_presentations.py` escribe desde `views/` las cifras, las tablas y las notas del
   orador, y compila con LuaLaTeX (`latexmk -lualatex`). Las figuras son los PDF vectoriales
   que dejan en `views/` los scripts 31 a 35. Sin LaTeX instalado, genera todo menos los PDF.
+- **Predictor de BETO (`txt_beto`).** Es el log del precio que predice
+  [BETO](https://huggingface.co/dccuchile/bert-base-spanish-wwm-uncased)
+  (`dccuchile/bert-base-spanish-wwm-uncased`) afinado con el título y la descripción. Se
+  genera en tres pasos:
+  1. `37_beto_input.py` escribe `stores/processed/beto_input.csv` con el texto, el precio y
+     la partición de la validación espacial de cada anuncio; los anuncios con la misma
+     descripción van a la partición del primero. El test lleva la partición -1.
+  2. `beto_kaggle.py` corre en un notebook de Kaggle con GPU; por defecto, 3 épocas y 256
+     tokens. Afina un modelo por partición y predice las filas que dejó fuera; en el test
+     promedia los cinco.
+  3. Su salida, `stores/processed/beto_predictions.csv`, se versiona para que el repo corra
+     sin GPU. `utils.add_beto` la une por `property_id` y `38_beto_check.py` la verifica.
 - Los scripts se corren desde `scripts/`. La semilla es `utils.SEED`. Un envío ya escrito no
   se sobrescribe: si su contenido cambia, se guarda como `_v2`, `_v3`...
 
@@ -177,6 +189,7 @@ Notas:
 │   ├── 35_purchase_rule.py         Etapa 4: regla de compra por cuantil y descuento
 │   ├── 36_build_presentations.py   las dos presentaciones
 │   │   — experimentos (ver EXPERIMENTOS.md) —
+│   ├── 37_beto_input.py, beto_kaggle.py, 38_beto_check.py   predictor de BETO (Kaggle, GPU)
 │   └── 05, 08–10, 12, 14, 15, 17–19, 21–25, 27–30
 ├── stores/
 │   ├── raw/                datos de Kaggle (train, test, plantilla de envío)
@@ -210,8 +223,9 @@ No se versionan y se regeneran con los scripts: `stores/processed/oof_prediction
   (`serviciosgis.catastrobogota.gov.co`), que publican esas capas de datos abiertos, el 19
   de noviembre de 2026.
 - **Texto del anuncio**: 18 indicadores con reglas (parqueadero, terraza, ascensor, vista,
-  estrato declarado, piso...) y un ridge sobre TF-IDF del título y la descripción, ajustado
-  fuera de muestra dentro de cada partición.
+  estrato declarado, piso...), un ridge sobre TF-IDF del título y la descripción, ajustado
+  fuera de muestra dentro de cada partición, y la predicción de BETO afinado con el mismo
+  texto (fuera de muestra con las particiones espaciales; ver "Cómo reproducir").
 
 Predictores externos y de texto, con su fuente, su intuición económica y si entran al mejor
 modelo: `views/predictors_table.csv` (resumen en `views/predictors_summary.png`). La mezcla
