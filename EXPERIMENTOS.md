@@ -62,6 +62,21 @@ python 06_ensemble.py --number 186 --how weighted --weights 0.7 0.3 --models    
 python 30_probe_top.py --model 152_ensemble_w70_30_2 --number 189 --share 0.05 --factor 1.15
 python 07_results_table.py
 python 29_round10_table.py --models 127 152 177 178 179 180 181 182 183 184 185 186 187 188 189
+# Ronda 11 (BETO). beto_predictions.csv viene de beto_kaggle.py en Kaggle con GPU, sobre la
+# salida de 37_beto_input.py. Con poca memoria, PS3_MAX_JOBS=2 limita las particiones en paralelo.
+python 38_beto_check.py
+python 04_train_models.py --specs 193 194 195 196 199 200 --schemes spatial northeast
+python 20_twin_rules.py --model 193_boosting_pt_core_coords_by_type_level_q70_beto_nocoords_s10 --rules mix --numbers 197
+python 20_twin_rules.py --model 194_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10 --rules mix --numbers 198
+python 20_twin_rules.py --model 199_boosting_pt_core_coords_by_type_level_q65_ridge_beto_nocoords_s10 --rules mix --numbers 201
+python 20_twin_rules.py --model 200_boosting_pt_core_coords_by_type_level_q75_ridge_beto_nocoords_s10 --rules mix --numbers 202
+python 06_ensemble.py --number 203 --how weighted --weights 0.7 0.3 --models 198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix 196_quantile_net_ext_core_coords_by_type_q70_ridge_beto_nocoords
+python 06_ensemble.py --number 204 --how weighted --weights 0.6 0.4 --models 198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix 196_quantile_net_ext_core_coords_by_type_q70_ridge_beto_nocoords
+python 06_ensemble.py --number 205 --how weighted --weights 0.7 0.3 --models 198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix 148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
+python 40_clip_range.py --model 203_ensemble_w70_30_2 --number 206
+python 40_clip_range.py --model 204_ensemble_w60_40_2 --number 207
+python 40_clip_range.py --model 198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix --number 208
+python 39_beto_table.py
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -812,6 +827,55 @@ mejora viene de bajar el nivel, como la red 171 en la ronda 9. El kNN no aporta 
 5 % más alto de las predicciones de la 152 (515 pasan de 1.650 M). Baja el ponderado de
 151,7 a 146,6 y sube la espacial de 127,6 a 132,7: sirve para medir en Kaggle si el tramo
 caro está subpredicho.
+
+### Ronda 11: el texto con BETO
+
+`txt_beto` es el log del precio que predice BETO afinado con el título y la descripción,
+fuera de muestra con las particiones espaciales (los anuncios con la misma descripción,
+juntos). Solo, da 148,5 M de MAE frente a 169,1 M del ridge en las mismas filas y
+particiones; la correlación entre ambos, en log, es 0,83 (`views/beto_check.csv`). BETO
+corrige mejor los extremos: en el decil más caro su error es 341 M y el del ridge 537 M
+(`views/beto_deciles.csv`).
+
+Cifras en millones, de `views/beto_table.csv` (`39_beto_table.py`):
+
+| Fila | Qué es | Espacial | Ponderado | Media test | Máx. test | Δ esp. 152 | Δ pond. 152 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 127 | boosting, solo ridge (referencia) | 127,0 | 155,5 | 878 | 1.730 | −0,7 | +3,8 |
+| 197 | boosting, BETO en lugar del ridge | 125,1 | 155,8 | 882 | 1.686 | −2,6 | +4,1 |
+| 198 | boosting, BETO y ridge | 124,4 | 154,5 | 884 | 1.685 | −3,2 | +2,8 |
+| 201 | la 198 con cuantil 0,65 | 120,7 | 153,9 | 863 | 1.701 | −6,9 | +2,2 |
+| 202 | la 198 con cuantil 0,75 | 129,6 | 155,7 | 905 | 1.690 | +2,0 | +4,0 |
+| 148 | red, solo ridge (referencia) | 137,6 | 148,2 | 875 | 2.002 | +10,0 | −3,5 |
+| 195 | red, BETO en lugar del ridge | 135,0 | 147,6 | 887 | 2.059 | +7,4 | −4,1 |
+| 196 | red, BETO y ridge | 133,7 | 146,3 | 875 | 1.981 | +6,0 | −5,5 |
+| 152 | 127 / 148, 70/30 | 127,6 | 151,7 | 877 | 1.772 | | |
+| 203 | 198 / 196, 70/30 | 124,8 | 150,5 | 881 | 1.745 | −2,8 | −1,2 |
+| 204 | 198 / 196, 60/40 | 125,5 | 149,4 | 881 | 1.778 | −2,2 | −2,3 |
+| 205 | 198 / 148, 70/30 | 125,5 | 150,9 | 881 | 1.753 | −2,1 | −0,8 |
+
+Las 197, 198, 201 y 202 llevan la regla `mix` de gemelos, como la 127. El cuantil 0,65 baja
+la espacial porque baja el nivel; interpolando entre 0,65 y 0,70 hasta la media de la 127
+(878 M), la espacial de la receta con BETO queda cerca de 123,3. La correlación en test entre
+los miembros de la 203 es 0,962, la misma que entre los de la 152: BETO mejora a los dos
+modelos sin hacerlos más distintos. Recortar al rango del train (300 a 1.650 M) no cambia la
+validación en más de 0,4 M; las 206 a 208 son la 203, la 204 y la 198 recortadas
+(`40_clip_range.py`).
+
+El `txt_beto` de cada fila viene de un modelo que no vio su precio ni el de sus anuncios de
+descripción idéntica. 155 filas (37 grupos) tienen gemelos físicos con otra descripción
+(`utils.twin_groups`) en otra partición de BETO.
+
+- **Espacial:** las filas de ajuste traen un `txt_beto` de modelos que vieron precios de la
+  validación. Es la limitación habitual de apilar con predicciones fuera de muestra fijas,
+  de segundo orden. Además, las 361 filas que se movieron con sus gemelos de descripción
+  hacen que algunos modelos de BETO hayan visto precios de la zona que predicen.
+- **Holdout nororiental:** la limitación es de primer orden. Sus 6.860 filas caen casi todas
+  en las particiones 0 y 2 de BETO, así que el `txt_beto` de cada fila de validación salió de
+  un modelo entrenado con los precios de otras filas de esa misma validación, incluidas las
+  de más de 1.000 M que el holdout deja fuera del ajuste.
+
+Por eso la decisión se toma con la espacial y el ponderado solo se reporta.
 
 ### Calibración de nivel (no es un modelo)
 

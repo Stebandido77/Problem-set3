@@ -44,6 +44,15 @@ Una fila por familia (su mejor especificación con la receta común):
 | Red neuronal | 148 | sin sintonizar (TPE en la 171: mejor espacial, peor ponderado) | 118,0 | 124,8 | 137,6 | 148,2 | 157,1 |
 | **Mezcla** | **152** | pesos fijos 70/30 | 95,5 | 112,2 | 127,6 | 151,7 | **148,2** |
 
+**Candidatos con BETO, todavía sin puntaje en Kaggle** (`views/beto_table.csv`, ronda 11 en
+`EXPERIMENTOS.md`). Sumar al ridge el precio que predice BETO con el texto mejora los dos
+modelos de la mezcla en la espacial: el boosting pasa de 127,0 a 124,4 (198) y la red de
+137,6 a 133,7 (196). La mezcla 70/30 de ambos (203, recortada al rango del train en la 206)
+da 124,8 en la espacial y 150,5 en el ponderado, frente a 127,6 y 151,7 de la 152, con una
+media en test de 881 M. El ponderado de estas filas es optimista: BETO se entrenó con precios
+de la validación nororiental, incluidos los de más de 1.000 M que ese holdout deja fuera
+del ajuste. Hasta ver su puntaje público, el mejor modelo sigue siendo la 152.
+
 Los hiperparámetros de cada familia y el detalle de cada búsqueda están en
 `views/family_table.csv` (columnas `hiperparametros` y `busqueda`). Ojo: la elastic net,
 el CART y el bosque se sintonizaron con la media del ponderado y la espacial como objetivo, y
@@ -190,6 +199,7 @@ Notas:
 │   ├── 36_build_presentations.py   las dos presentaciones
 │   │   — experimentos (ver EXPERIMENTOS.md) —
 │   ├── 37_beto_input.py, beto_kaggle.py, 38_beto_check.py   predictor de BETO (Kaggle, GPU)
+│   ├── 39_beto_table.py, 40_clip_range.py   tabla de la ronda de BETO y recorte al rango
 │   └── 05, 08–10, 12, 14, 15, 17–19, 21–25, 27–30
 ├── stores/
 │   ├── raw/                datos de Kaggle (train, test, plantilla de envío)
@@ -280,9 +290,9 @@ La 189 sale de `30_probe_top.py --share 0.05 --factor 1.15`. `probe_152_top5_x09
 fuera de los scripts y se conserva con el nombre con que se subió: es exactamente la regla
 `scale_top` de ese script (`--share 0.05 --factor 0.90`) aplicada a
 `152_ensemble_w70_30_2.csv`, sin fila en `cv_results.csv`. En los dos, el umbral es el
-percentil 95 de las propias predicciones, sin usar precios. Subir
-el tramo caro un 15 % empeora el puntaje en 11,3 M y bajarlo un 10 % lo empeora solo 0,7 M:
-ese tramo está bien calibrado y nada indica que el test pase del tope de 1.650 M del train.
+percentil 95 de las propias predicciones, sin usar precios. Subir el tramo caro un 15 %
+empeora el puntaje en 11,3 M y bajarlo un 10 % lo empeora solo 0,7 M: ese tramo está bien
+calibrado y nada indica que el test pase del tope de 1.650 M del train.
 
 Las cifras de validación de estas filas están en `views/level_calibration.csv` y
 `views/round10_table.csv`.
