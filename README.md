@@ -147,19 +147,20 @@ Notas:
   `stores/processed/test_predictions.csv` (predicciones en el test de cada fila) guardan
   todas las filas probadas. La ruta principal reemplaza las de sus modelos y conserva las
   demás, que algunas figuras de la comparación usan (progresión, resultados negativos).
-- **Presentaciones.** `36_build_presentations.py` arma los `.pptx` con python-pptx y los
-  exporta a PDF con PowerPoint por COM; sin PowerPoint deja solo los `.pptx`.
+- **Presentaciones.** Son Beamer con la plantilla de los Andes (`document/*.tex`).
+  `36_build_presentations.py` escribe desde `views/` las cifras, las tablas y las notas del
+  orador, y compila con LuaLaTeX (`latexmk -lualatex`). Las figuras son los PDF vectoriales
+  que dejan en `views/` los scripts 31 a 35. Sin LaTeX instalado, genera todo menos los PDF.
 - Los scripts se corren desde `scripts/`. La semilla es `utils.SEED`. Un envío ya escrito no
   se sobrescribe: si su contenido cambia, se guarda como `_v2`, `_v3`...
 
 ## Estructura
 
 ```
-├── document/               best_equipo_06 y compare_equipo_06 (.pptx editables y .pdf)
+├── document/               best_equipo_06 y compare_equipo_06 (.tex, .pdf y notas del orador)
 ├── scripts/
 │   ├── utils.py, models.py rutas, validación, métricas, envíos; una receta por familia
-│   ├── plot_style.py       un color fijo por familia, 300 dpi, millones de pesos
-│   ├── deck.py             piezas comunes de las diapositivas
+│   ├── plot_style.py       paleta y fuente de la plantilla, tamaños de diapositiva, PDF
 │   │   — ruta principal (run_all) —
 │   ├── 01_download_osm.py, 11_download_bogota.py, 16_download_lots.py   fuentes externas
 │   ├── 02_build_features.py   limpieza, predictores de texto, espaciales y de la manzana

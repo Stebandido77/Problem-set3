@@ -15,5 +15,17 @@ stores/processed/optuna_round7.db
 
 # Corrida de verificación desde cero (run_all en un clon limpio)
 _clean_run/
-# Vista previa de las diapositivas (36_build_presentations.py --preview)
+# Vista previa de las diapositivas de la versión anterior en PowerPoint
 document/_preview/
+
+# Auxiliares de LaTeX y copia de revisión de la plantilla
+document/*.aux
+document/*.log
+document/*.nav
+document/*.out
+document/*.snm
+document/*.toc
+document/*.fls
+document/*.fdb_latexmk
+document/*.vrb
+document/_tpl_check/

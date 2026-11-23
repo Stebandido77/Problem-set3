@@ -1,0 +1,175 @@
+%% ============================================================
+%%  best_equipo_06: el mejor modelo y la decisión de compra
+%%  Plantilla Beamer Uniandes (beamerthemeUniandes.sty, sin cambios).
+%%  Compilar con LuaLaTeX:  latexmk -lualatex best_equipo_06.tex
+%%  Las cifras y tablas salen de generated/ (scripts/36_build_presentations.py);
+%%  las figuras, de ../views/ (scripts 31 a 35). Notas del orador: notas_best.md.
+%% ============================================================
+\documentclass[aspectratio=169,11pt]{beamer}
+\input{preamble}
+\usetikzlibrary{arrows.meta,positioning}
+\graphicspath{{../views/}}
+\input{generated/cifras}
+
+\title[El mejor modelo y la decisión de compra]{¿Podemos confiar en el modelo para comprar vivienda en Chapinero?}
+\subtitle{El mejor modelo y la decisión de compra}
+\author[Equipo 06]{[NOMBRES]}
+\institute{Big Data y Machine Learning (MECA 4107)\\ Universidad de los Andes}
+\date[Nov.\ 2026]{Bogotá, noviembre de 2026}
+
+\newcommand{\twolines}[2]{\begin{tabular}[t]{@{}c@{}}#1\\#2\end{tabular}}
+\newcommand{\slidefig}[1]{\centering\includegraphics[width=\textwidth]{#1}\par}
+
+\begin{document}
+
+{\setbeamertemplate{footline}{}
+ \begin{frame}[plain,noframenumbering]
+   \titlepage
+ \end{frame}}
+
+% 1 ---------------------------------------------------------------
+\begin{frame}{El modelo predice Chapinero con un error de \KagBest\ millones}
+  \vfill
+  \begin{columns}[T]
+    \column{0.32\textwidth}\centering \keyfig{\KagBest\ M}{MAE público en Kaggle}
+    \column{0.32\textwidth}\centering \keyfig{−\GainNaive}{\twolines{frente a predecir la mediana}{(\KagNaive\ M)}}
+    \column{0.32\textwidth}\centering \keyfig{\SpatialBest\ M}{\twolines{MAE en zonas que no vio}{(validación espacial)}}
+  \end{columns}
+  \vfill
+  \begin{center}\small
+    \begin{tabular}{lrr}
+      \toprule
+      Si la empresa ofrece\ldots & Compra & Sobrepago / capital \\
+      \midrule
+      lo que predice el modelo   & \OverClosed & \OverCapital \\
+      el cuantil 0,20 del precio & \LowClosed  & \LowCapital \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  \vfill
+  \takeaway{Sirve para escoger candidatos, no para fijar el precio de compra.}
+\end{frame}
+
+% 2 ---------------------------------------------------------------
+\begin{frame}{Entrenamos en el resto de Bogotá; Chapinero es más caro}
+  \begin{columns}[c]
+    \column{0.47\textwidth}
+      \centering\includegraphics[width=\linewidth]{map_train_test}
+    \column{0.51\textwidth}
+      \centering\footnotesize
+      \input{generated/tabla_chapinero}
+  \end{columns}
+  \takeaway{Chapinero casi no tiene casas y su terreno vale \LandRatio\ veces más.}
+\end{frame}
+
+% 3 ---------------------------------------------------------------
+\begin{frame}{El modelo: un boosting y una red neuronal que apuntan alto}
+  \centering
+  \begin{tikzpicture}[
+      font=\footnotesize, align=center, line width=0.4pt,
+      box/.style={draw=andesmid, rounded corners=2pt, inner sep=4pt,
+                  minimum height=1.05cm, text width=3.6cm},
+      head/.style={font=\scriptsize\bfseries, text=andesgray},
+      flow/.style={-{Stealth[length=4pt,width=3pt]}, draw=andesgray, line width=0.5pt}]
+    % Columna 1: qué ve el modelo
+    \node[box] (struct) at (0, 1.35) {\textbf{El inmueble}\\tipo, alcobas, baños, área};
+    \node[box] (place)  at (0, 0)    {\textbf{La ubicación}\\estrato, terreno, distancias};
+    \node[box] (text)   at (0,-1.35) {\textbf{El texto del anuncio}\\18 señales y un ridge};
+    % Columna 2: los dos modelos
+    \node[box, draw=andesaccent, line width=0.8pt] (boost) at (4.95, 0.75)
+         {\textbf{Boosting cuantílico}\\cuantil 0,70 del precio\\peso 70\,\%};
+    \node[box, draw=andesred, line width=0.8pt] (net) at (4.95,-0.75)
+         {\textbf{Red neuronal cuantílica}\\cuantil 0,70 del precio\\peso 30\,\%};
+    % Columna 3: la predicción
+    \node[box, draw=andesblack, line width=0.8pt] (pred) at (9.85, 0)
+         {\textbf{Precio de oferta}\\0,7 boosting + 0,3 red\\millones de pesos};
+    % Encabezados alineados
+    \node[head] at (0, 2.35)    {Qué ve el modelo};
+    \node[head] at (4.95, 2.35)  {Dos modelos por tipo de inmueble};
+    \node[head] at (9.85, 2.35) {La predicción};
+    % Flechas: las tres entradas se juntan y alimentan los dos modelos
+    \coordinate (join) at (2.65, 0);
+    \foreach \src in {struct, place, text}
+      \draw[draw=andesgray, line width=0.5pt] (\src.east) -- (2.35, 0 |- \src.east) -- (join);
+    \draw[flow] (join) |- (boost.west);
+    \draw[flow] (join) |- (net.west);
+    \draw[flow] (boost.east) -- (pred.west);
+    \draw[flow] (net.east) -- (pred.west);
+  \end{tikzpicture}
+  \par\vspace{0.35cm}
+  \begin{minipage}{0.92\textwidth}\small\raggedright
+    Los dos apuntan al cuantil 0,70 porque Chapinero es más caro que el resto de Bogotá.
+    La red puede predecir por encima del tope de 1.650 M que limita a los árboles.
+  \end{minipage}
+\end{frame}
+
+% 4 ---------------------------------------------------------------
+\begin{frame}{Cada mejora en Kaggle tiene una causa}
+  \slidefig{kaggle_progression}
+  \takeaway{La mezcla con la red le gana \GainBoost\ M al mejor boosting solo (\KagBoost\ M).}
+\end{frame}
+
+% 5 ---------------------------------------------------------------
+\begin{frame}{El texto del anuncio es lo que más pesa en el modelo}
+  \slidefig{best_errors_importance}
+  \takeaway{El ridge sobre el texto aporta el \ImpApt\ de la ganancia en apartamentos.}
+\end{frame}
+
+% 6 ---------------------------------------------------------------
+\begin{frame}{El modelo sobrepredice los baratos y subpredice los caros}
+  \slidefig{best_errors_segments}
+  \takeaway{Sobrepredice el \ShareOverCheap\ de los de menos de 400 M y el \ShareOverRich\ de los de más de 1.200 M.}
+\end{frame}
+
+% 7 ---------------------------------------------------------------
+\begin{frame}{Si pagar de más cuesta el triple, gana el cuantil \AsymWinnerQ}
+  \slidefig{asymmetric_ranking}
+  \takeaway{La mezcla que gana en Kaggle cae al puesto \BestRankKthree\ cuando pagar de más cuesta el triple.}
+\end{frame}
+
+% 8 ---------------------------------------------------------------
+\begin{frame}{Ofrecer la predicción compra justo lo que sobreestima}
+  \slidefig{purchase_rule_frontier}
+  \takeaway{A igual número de compras, bajar el cuantil sobrepaga menos que dar un descuento.}
+\end{frame}
+
+% 9 ---------------------------------------------------------------
+\begin{frame}{Proponemos el cuantil 0,20, solo en apartamentos}
+  \vfill
+  \centering\footnotesize
+  \input{generated/tabla_regla}
+  \par\vspace{4pt}{\scriptsize\color{andesgray} Validación espacial fuera de muestra; sobrepago frente al precio pedido.}
+  \vfill
+  \takeaway{En apartamentos el sobrepago es \AptCapital\ del capital; en casas, \HouseCapital.}
+\end{frame}
+
+% 10 --------------------------------------------------------------
+\begin{frame}{Para escoger candidatos sí; para fijar el precio, no}
+  \begin{itemize}
+    \item Usar el cuantil 0,20 sin descuento para escoger candidatos.
+    \item Solo apartamentos; cerrar después de una tasación física.
+    \item No usarlo en casas ni con predicciones de más de 900 M.
+  \end{itemize}
+  \vfill
+  \begin{columns}[T]
+    \column{0.45\textwidth}\centering \keyfig{\AptClosed}{\twolines{de los apartamentos se compran}{con el cuantil 0,20}}
+    \column{0.45\textwidth}\centering \keyfig{\AptCapital}{\twolines{de sobrepago sobre el capital, frente a}{\OverCapitalD\ con el modelo de Kaggle}}
+  \end{columns}
+  \vfill
+  \takeaway{Antes de comprometer capital, revisar la regla con precios de cierre.}
+\end{frame}
+
+% 11 --------------------------------------------------------------
+\begin{frame}{Cuatro riesgos pueden subir el sobrepago real}
+  \begin{itemize}
+    \item \textbf{Precios de oferta, no de cierre:} si se vende por menos, se pagó de más.
+    \item \textbf{Área faltante} en el \ShareAreaMissing\ de los anuncios: el MAE sube de \MaeAreaOk\ a \MaeAreaMissing\ M.
+    \item \textbf{Datos de 2019 a 2021:} el mercado pudo cambiar.
+    \item \textbf{Cambio de zona:} la espacial da \SpatialBest\ M y Kaggle \KagBest\ M; el nivel en Chapinero es incierto.
+  \end{itemize}
+  \takeaway{El modelo filtra; la tasación decide.}
+\end{frame}
+
+\andesclosing{¡Gracias!}{Equipo 06 · MECA 4107}
+
+\end{document}
