@@ -35,7 +35,13 @@ destruye capital?
 │   ├── 16_download_lots.py    lote, pisos y área construida del catastro (ronda 4)
 │   ├── 17_tune_families.py    Optuna TPE para bosque, elastic net y CART cuantílicos (ronda 5)
 │   ├── 18_family_table.py     tabla por familia: versión anterior, nueva y boosting 83 (ronda 5)
-│   └── 19_genetic_search.py   NSGA-II (genético) para el bosque cuantílico (ronda 6)
+│   ├── 19_genetic_search.py   NSGA-II (genético) para el bosque cuantílico (ronda 6)
+│   ├── 20_twin_rules.py       reglas de gemelos sobre anuncios repetidos (ronda 7)
+│   ├── 21_round7_tables.py    tablas de resumen, subconjuntos y deciles de la ronda 7
+│   ├── 22_text_nets.py        compara representaciones y redes para el texto (ronda 7)
+│   ├── 23_rebuild_oof.py      reconstruye OOF selectivas de modelos estratégicos (ronda 8)
+│   ├── 24_analyze_oof.py      métricas, correlaciones de error y ensembles OOF (ronda 8)
+│   └── 25_new_submissions.py  genera los candidatos 154–161 para Kaggle (ronda 8)
 ├── stores/
 │   ├── raw/                   datos de Kaggle (train, test, plantilla de envío)
 │   ├── external/              caché de descargas de Bogotá (no se versiona)
@@ -84,6 +90,10 @@ python 19_genetic_search.py --spec 107 --sampler nsga2 --n-trials 120   # ~60 mi
 python 19_genetic_search.py --spec 107 --confirm
 python 04_train_models.py --specs 112 113 114 115 --schemes northeast spatial chapinero
 python 06_ensemble.py --number 116 --how weighted --weights 0.8 0.2 --models     83_boosting_ext_core_coords_by_type_level_q70_ridge_s10     114_random_forest_ext_core_coords_by_type_level_q70_ridge_net_nocoords   # y 117-119
+# Ronda 8: reconstrucción OOF selectiva, análisis de diversidad y nuevos envíos
+python 23_rebuild_oof.py --specs 3 45 54 65 77 --schemes random_twins spatial chapinero northeast
+python 24_analyze_oof.py
+python 25_new_submissions.py
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -612,6 +622,77 @@ Estos envíos están en `views/level_calibration.csv` y no en la tabla principal
 | `59_..._q65_x120` | 54 | 1,20 | 1.010 | 188.2 |
 
 El holdout dice que el 54 ya está cerca del nivel óptimo (sesgo −52 M): escalarlo empeora.
+
+#### Ronda 8: reconstrucción OOF y diversidad de errores
+
+Esta ronda no amplía la búsqueda de hiperparámetros. Su objetivo es reconstruir
+predicciones fuera de muestra de un conjunto pequeño de modelos estratégicos,
+medir qué tan diferentes son sus errores y definir nuevos ensembles sin escoger
+los pesos a partir del leaderboard público de Kaggle.
+
+`stores/processed/oof_predictions.csv` no se versiona porque está excluido en
+`.gitignore`. `23_rebuild_oof.py` permite reconstruirlo selectivamente para las
+especificaciones 03, 45, 54, 65 y 77 con cuatro esquemas: validación aleatoria
+agrupando gemelos (`random_twins`), validación espacial, holdout tipo Chapinero
+y holdout nororiental.
+
+Las métricas reconstruidas quedaron así, en millones de pesos:
+
+| Modelo | Random twins | Espacial | Chapinero | Nororiental |
+|---|---:|---:|---:|---:|
+| 03 lineal | 156,1 | 168,1 | 183,3 | 190,0 |
+| 45 boosting | **108,4** | **135,9** | 174,1 | 168,5 |
+| 54 híbrido q0,65 | 116,4 | 142,8 | 157,9 | **157,8** |
+| 65 boosting q0,70 | 118,5 | 148,9 | 159,0 | 162,9 |
+| 77 boosting externo q0,70 | 117,7 | 146,0 | **151,2** | 162,7 |
+
+Ningún modelo domina todos los esquemas. El 45 es el más fuerte en
+`random_twins` y espacial; el 54 es el mejor en el holdout nororiental; y el 77
+es el mejor de los cinco en el holdout tipo Chapinero.
+
+`24_analyze_oof.py` genera tres archivos en `views/`:
+
+- `oof_model_metrics.csv`: MAE, sesgo, RMSE, cobertura y tasas de
+  sobrepredicción y subpredicción;
+- `oof_error_correlations.csv`: correlación de errores y desacuerdo entre pares
+  de modelos;
+- `oof_ensemble_candidates.csv`: evaluación OOF de ensembles con pesos
+  predefinidos.
+
+El modelo lineal 03 es menos preciso, pero aporta la mayor diversidad frente a
+los árboles: la correlación de sus errores con el 77 es 0,657 en
+`random_twins` y 0,683 en la validación espacial. Por eso se conserva como una
+señal potencial de extrapolación y diversidad, no como modelo principal.
+
+Los ensembles OOF tampoco dominan todos los esquemas. La mezcla
+`E05_45_77_03_w70_20_10` reduce el MAE espacial del 45 de 135,9 a 134,1 M,
+pero los modelos individuales siguen ganando en los holdouts: 151,2 M para el
+77 en Chapinero y 157,8 M para el 54 en el nororiente. Por esta razón no se hizo
+una búsqueda automática de pesos.
+
+A partir de este análisis, `25_new_submissions.py` genera ocho candidatos
+adicionales, numerados 154–161:
+
+- 154: 80 % modelo 83 + 20 % modelo 54;
+- 155: 60 % modelo 83 + 20 % modelo 54 + 20 % modelo 45;
+- 156: 70 % modelo 83 + 20 % modelo 54 + 10 % modelo 03;
+- 157: 70 % modelo 83 + 15 % modelo 54 + 15 % modelo 77;
+- 158: 60 % modelo 83 + 20 % modelo 127 + 20 % red 148;
+- 159: promedio simple de 83, 127 y 148;
+- 160: mediana de 83, 127 y 148;
+- 161: 70 % modelo 83 + 15 % bosque 114 + 15 % red 148.
+
+Los archivos se guardan en `stores/submissions/`. Su trazabilidad queda en
+`views/new_submissions_manifest.csv`, que registra la hipótesis, media, mediana,
+mínimo, máximo y número de predicciones superiores a 1.650 M.
+
+Los pesos de estos ensembles se fijaron antes de observar sus puntajes públicos.
+La secuencia de selección fue:
+
+OOF → análisis de errores → pesos predefinidos → submission → Kaggle
+
+y no una búsqueda iterativa de pesos basada en el leaderboard. Kaggle se
+conserva así como validación externa de estas nuevas hipótesis.
 
 ## Pendientes
 

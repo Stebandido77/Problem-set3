@@ -26,4 +26,24 @@ python 06_ensemble.py --number 84 --how weighted --weights 0.9 0.1 --models 83_b
 python 06_ensemble.py --number 85 --how weighted --weights 0.8 0.2 --models 83_boosting_ext_core_coords_by_type_level_q70_ridge_s10 78_quantile_net_core_coords_by_type_q70
 python 07_results_table.py
 python 12_text_report.py --svd 20
-# Opcional y lento (~5 min por esquema): python 08_calibrate_holdout.py
+# Opcional y lento (~5 min por esquema):
+# python 08_calibrate_holdout.py
+# ----------------------------------------------------------------------
+# Ronda 8: reconstrucción OOF, análisis de diversidad y nuevos submissions
+# ----------------------------------------------------------------------
+
+echo "=== Ronda 8: reconstrucción OOF selectiva ==="
+
+python 23_rebuild_oof.py \
+  --specs 3 45 54 65 77 \
+  --schemes random_twins spatial chapinero northeast
+
+echo "=== Ronda 8: análisis OOF ==="
+
+python 24_analyze_oof.py
+
+echo "=== Ronda 8: generación de nuevos submissions ==="
+
+python 25_new_submissions.py
+
+echo "=== Ronda 8 completada ==="
