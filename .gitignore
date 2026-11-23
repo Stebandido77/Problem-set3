@@ -29,3 +29,6 @@ document/*.fls
 document/*.fdb_latexmk
 document/*.vrb
 document/_tpl_check/
+
+# Entrada del modelo de texto (más de 20 MB; se regenera con 37_beto_input.py)
+stores/processed/beto_input.csv
