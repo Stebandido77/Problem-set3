@@ -35,10 +35,10 @@ from models import (FAMILIES, MONOTONE_FEATURES, ByPropertyType, DropColumns, Em
                     TextFeatures, TextNet, TextPredictors, TrimPricePerM2, TruncationCorrection,
                     TwinFilter, build_model,
                     fit_model, load_best_params, northeast_building_groups)
-from utils import (COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, add_embeddings,
-                   chapinero_holdout, error_summary, feature_sets, load_processed,
-                   northeast_holdout, random_cv, random_twin_splits, save_submission,
-                   similarity_weights, spatial_cv_splits, test_center, weighted_mae)
+from utils import (BETO_FEATURE, COORD_FEATURES, ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR,
+                   add_beto, add_embeddings, chapinero_holdout, error_summary, feature_sets,
+                   load_processed, northeast_holdout, random_cv, random_twin_splits,
+                   save_submission, similarity_weights, spatial_cv_splits, test_center, weighted_mae)
 
 
 # Esquemas de validación: nombre -> función (train, test) -> lista de particiones.
@@ -94,6 +94,7 @@ class Spec:
     pinball: bool = False        # LightGBM con pérdida pinball propia (PinballBoosting)
     monotone: tuple = ()         # columnas con restricción monótona creciente (con pinball)
     scale: bool = False          # estandariza los predictores (ScaledColumns)
+    beto: bool = False           # agrega txt_beto, el precio según BETO (utils.add_beto)
 
     def name(self, number):
         suffix = f"_{self.variant}" if self.variant else ""
@@ -562,6 +563,33 @@ ROUND_11 = [Spec("boosting", "pt_core_coords", f"by_type_level_q{q}_ridge_nocoor
                  drop_coords=True, n_seeds=10, text_sources=("ridge",), target="level",
                  by_type=True, params=quantile_loss(q / 100))
             for q in (20, 30, 50)]
+# Ronda 11 de experimentos (BETO; la lista ROUND_11 es la Etapa 4): el precio que predice
+# BETO con el texto (txt_beto, fuera de muestra con las particiones espaciales) en lugar del
+# ridge y además del ridge, sobre la receta del 125 (boosting, 10 semillas; la regla 'mix' de
+# 20_twin_rules.py da la versión comparable con la 127) y sobre la de la red 148 (5
+# semillas). Criterio: validación espacial; menos de 2 M es ruido. Las referencias con solo
+# el ridge son la 125/127 y la 148.
+ROUND_BETO_START = 193
+R125 = dict(drop_coords=True, n_seeds=10, target="level", by_type=True,
+            params=quantile_loss(0.70))
+ROUND_BETO = [
+    Spec("boosting", "pt_core_coords", "by_type_level_q70_beto_nocoords_s10", beto=True,
+         **R125),
+    Spec("boosting", "pt_core_coords", "by_type_level_q70_ridge_beto_nocoords_s10",
+         beto=True, text_sources=("ridge",), **R125),
+    Spec("quantile_net", "ext_core_coords", "by_type_q70_beto_nocoords", beto=True,
+         **NET_148),
+    Spec("quantile_net", "ext_core_coords", "by_type_q70_ridge_beto_nocoords", beto=True,
+         text_sources=("ridge",), **NET_148),
+]
+# Las 197 y 198 son la 193 y la 194 con la regla 'mix' de gemelos (20_twin_rules.py). La
+# 194 deja la media en test en 885 M, 6 M sobre la 125: la misma receta con los cuantiles
+# 0,65 y 0,75, para comparar a nivel igual.
+ROUND_BETO_B_START = 199
+ROUND_BETO_B = [Spec("boosting", "pt_core_coords",
+                     f"by_type_level_q{q}_ridge_beto_nocoords_s10", beto=True,
+                     text_sources=("ridge",), **{**R125, "params": quantile_loss(q / 100)})
+                for q in (65, 75)]
 # Número de envío -> especificación.
 NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_2, start=ROUND_2_START)),
@@ -582,7 +610,9 @@ NUMBERED_SPECS = {**dict(enumerate(SPECS, start=1)),
                   **dict(enumerate(ROUND_9, start=ROUND_9_START)),
                   **dict(enumerate(ROUND_10, start=ROUND_10_START)),
                   **dict(enumerate(ROUND_10B, start=ROUND_10B_START)),
-                  **dict(enumerate(ROUND_11, start=ROUND_11_START))}
+                  **dict(enumerate(ROUND_11, start=ROUND_11_START)),
+                  **dict(enumerate(ROUND_BETO, start=ROUND_BETO_START)),
+                  **dict(enumerate(ROUND_BETO_B, start=ROUND_BETO_B_START))}
 
 
 # Ronda 4, pieza A: fuentes de predictores de texto (models.TextPredictors). Cada una se
@@ -686,6 +716,8 @@ def spec_features(spec, sets):
         features = features + ["text"]
     if spec.names:
         features = features + ["title_name"]
+    if spec.beto:
+        features = features + [BETO_FEATURE]
     if spec.text_sources:
         inputs = ["text"] + [c for key in spec.text_sources
                              for c in TEXT_SOURCES[key].inputs()]
@@ -702,8 +734,10 @@ def fit_predict(spec, params, X_fit, y_fit, X_pred, weights=None):
 
 def evaluate(spec, params, X, y, splits, weights=None):
     """Predicciones para las filas de validación de cada partición (NaN en el resto).
-    Las familias de un solo núcleo ajustan sus particiones en paralelo."""
+    Las familias de un solo núcleo ajustan sus particiones en paralelo; la variable de
+    entorno PS3_MAX_JOBS limita cuántas a la vez, si falta memoria."""
     n_jobs = len(splits) if spec.family in SINGLE_CORE_FAMILIES else 1
+    n_jobs = min(n_jobs, int(os.environ.get("PS3_MAX_JOBS", n_jobs)))
     fold_preds = Parallel(n_jobs=n_jobs)(
         delayed(fit_predict)(spec, params, X.iloc[fit_idx], y.iloc[fit_idx], X.iloc[val_idx],
                              None if weights is None else weights[fit_idx])
@@ -747,6 +781,8 @@ def main():
     if any(c.startswith("emb_") for spec in selected
            for key in spec.text_sources for c in TEXT_SOURCES[key].inputs()):
         train, test = add_embeddings(train, test)
+    if any(spec.beto for spec in selected):
+        train, test = add_beto(train, test)
     y = train[TARGET]
     sets = feature_sets(train.columns)
     best_params = load_best_params()
