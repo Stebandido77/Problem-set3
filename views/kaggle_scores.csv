@@ -16,3 +16,5 @@ model,public_mae,date
 108_linear_ext_core_coords_splines_by_type_level_q70_ridge_oof,180505536,2026-11-21
 148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords,157141157,2026-11-21
 152_ensemble_w70_30_2,148209395,2026-11-21
+189_probe_ensemble_w70_30_2_top5_x115,159530704,2026-11-23
+probe_152_top5_x090,148874906,2026-11-23

@@ -347,6 +347,13 @@ def error_summary(y_true, y_pred):
     }
 
 
+def load_kaggle_scores():
+    """Puntajes públicos de views/kaggle_scores.csv sin los sondeos del tablero (envíos con
+    'probe' en el nombre), que calibran el nivel con el leaderboard y no son modelos."""
+    scores = pd.read_csv(VIEWS_DIR / "kaggle_scores.csv")
+    return scores[~scores["model"].str.contains("probe")].reset_index(drop=True)
+
+
 def find_submission(file_name):
     """Ruta de un envío guardado, en la carpeta de envíos o en la de obsoletos."""
     path = SUBMISSIONS_DIR / file_name

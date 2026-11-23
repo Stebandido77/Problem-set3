@@ -37,9 +37,9 @@ import pandas as pd
 
 import plot_style as ps
 from models import northeast_building_groups
-from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, find_submission, load_processed,
-                   northeast_holdout, random_cv, random_twin_splits, spatial_cv_splits,
-                   weighted_mae)
+from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, find_submission,
+                   load_kaggle_scores, load_processed, northeast_holdout, random_cv,
+                   random_twin_splits, spatial_cv_splits, weighted_mae)
 
 MILLION = 1e6
 SCHEMES = {
@@ -174,7 +174,7 @@ def old_submission_row(kaggle_name, naive, calib, pre_osm):
 
 def schemes_table(train, test, oof):
     """Un envío por fila: esquemas, Kaggle, sesgos y media en test (en millones)."""
-    scores = pd.read_csv(VIEWS_DIR / "kaggle_scores.csv")
+    scores = load_kaggle_scores()
     results = pd.read_csv(VIEWS_DIR / "cv_results.csv")
     results["file"] = results["submission"].str.removesuffix(".csv")
     by_file = results.dropna(subset=["file"]).set_index("file")

@@ -15,14 +15,14 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from utils import VIEWS_DIR
+from utils import VIEWS_DIR, load_kaggle_scores
 
 CRITERIA = {"mae_weighted": "ponderado", "mae_spatial": "espacial"}
 
 
 def comparison_table():
     """Envíos con puntaje público y con los dos criterios calculados, en millones."""
-    scores = pd.read_csv(VIEWS_DIR / "kaggle_scores.csv")
+    scores = load_kaggle_scores()
     results = pd.read_csv(VIEWS_DIR / "cv_results.csv")
     results["file"] = results["submission"].str.removesuffix(".csv")
     merged = scores.merge(results, left_on="model", right_on="file", how="left",

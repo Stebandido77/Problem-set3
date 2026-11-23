@@ -20,7 +20,7 @@ y `views/kaggle_scores.csv`.
 **Mejor modelo: `152_ensemble_w70_30_2`**, la mezcla del boosting 127 (70 %) y la red
 neuronal 148 (30 %), con **148,2 M en el tablero público** (148.209.395), frente a 377,1 M del
 ingenuo (mediana constante) y 152,1 M del mejor boosting solo (83). Es el envío con el menor
-puntaje público de los 17 registrados.
+puntaje público de los 19 registrados.
 
 - **Boosting 127:** LightGBM con pérdida cuantílica en 0,70 sobre el precio en nivel, un
   modelo para apartamentos y otro para casas, con estrato y valor del terreno de la manzana,
@@ -243,7 +243,7 @@ y 11 se subieron sin OSM; sus archivos están en `stores/submissions/obsoletos/`
 | `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10_v2` | boosting | 152,1 |
 | **`152_ensemble_w70_30_2`** | **mezcla** | **148,2** |
 
-Son 16 modelos más una calibración (abajo): 17 envíos registrados. **El taller pide al menos
+Son 16 modelos más tres calibraciones (abajo): 19 envíos registrados. **El taller pide al menos
 20 y al menos uno por familia: falta subir la elastic net** (por ejemplo
 `104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned.csv`) y registrar
 cualquier envío subido que no esté en `views/kaggle_scores.csv`.
@@ -259,7 +259,16 @@ modelo.
 | `32_boosting_full_coords_x115` | el envío 10 (sin OSM) por 1,15 | 171,7 |
 | `57`, `58`, `59` (`..._q65_x110/x115/x120`) | el híbrido 54 por 1,10, 1,15 y 1,20 | sin subir |
 | `60_boosting_full_coords_x120` | el envío 10 por 1,20 | sin subir |
-| `189_probe_ensemble_w70_30_2_top5_x115` | el 5 % más alto de la 152 por 1,15 | sin subir |
+| `189_probe_ensemble_w70_30_2_top5_x115` | el 5 % más alto de la 152 por 1,15 | 159,5 |
+| `probe_152_top5_x090` | el 5 % más alto de la 152 por 0,90 | 148,9 |
+
+La 189 sale de `30_probe_top.py --share 0.05 --factor 1.15`. `probe_152_top5_x090` se armó
+fuera de los scripts y se conserva con el nombre con que se subió: es exactamente la regla
+`scale_top` de ese script (`--share 0.05 --factor 0.90`) aplicada a
+`152_ensemble_w70_30_2.csv`, sin fila en `cv_results.csv`. En los dos, el umbral es el
+percentil 95 de las propias predicciones, sin usar precios. Subir
+el tramo caro un 15 % empeora el puntaje en 11,3 M y bajarlo un 10 % lo empeora solo 0,7 M:
+ese tramo está bien calibrado y nada indica que el test pase del tope de 1.650 M del train.
 
 Las cifras de validación de estas filas están en `views/level_calibration.csv` y
 `views/round10_table.csv`.

@@ -26,7 +26,8 @@ import pandas as pd
 
 import plot_style as ps
 from models import QuantileNet, northeast_building_groups
-from utils import BEST_PARAMS_PATH, PROCESSED_DIR, TARGET, VIEWS_DIR, weighted_mae
+from utils import (BEST_PARAMS_PATH, PROCESSED_DIR, TARGET, VIEWS_DIR, load_kaggle_scores,
+                   weighted_mae)
 
 M = 1e6
 CAP = 1.65e9
@@ -45,7 +46,7 @@ def load_results():
 
 
 def load_kaggle():
-    kaggle = pd.read_csv(VIEWS_DIR / "kaggle_scores.csv")
+    kaggle = load_kaggle_scores()
     kaggle["number"] = kaggle["model"].str.split("_").str[0].astype(int)
     return kaggle
 
