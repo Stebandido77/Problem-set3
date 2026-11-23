@@ -32,3 +32,6 @@ document/_tpl_check/
 
 # Entrada del modelo de texto (más de 20 MB; se regenera con 37_beto_input.py)
 stores/processed/beto_input.csv
+
+# Plantilla Beamer de los Andes descargada (se usa descomprimida en document/)
+document/uniandes-beamer.zip
