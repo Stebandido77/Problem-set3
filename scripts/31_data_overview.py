@@ -156,25 +156,35 @@ def plot_map(processed):
     """Dispersión de train y test en lat/lon, con el test resaltado."""
     train, test = processed["train"], processed["test"]
     near = distance_to_nearest_m(train, test) < NORTHEAST_RADIUS_M
-    fig, ax = plt.subplots(figsize=(6.5, 5.6))
-    ax.scatter(train["lon"], train["lat"], s=1, color=TRAIN_COLOR, alpha=0.25, lw=0,
-               label=f"Train: resto de Bogotá ({ps.es_number(len(train), 0)})", rasterized=True)
-    ax.scatter(test["lon"], test["lat"], s=1.5, color=TEST_COLOR, alpha=0.6, lw=0,
-               label=f"Test: Chapinero ({ps.es_number(len(test), 0)})", rasterized=True)
+    print(f"Mapa: {pct(near.mean())} del train a menos de {NORTHEAST_RADIUS_M} m del test")
+    fig, ax = plt.subplots(figsize=ps.HALF)
+    ax.scatter(train["lon"], train["lat"], s=0.4, color=TRAIN_COLOR, alpha=0.3, lw=0,
+               rasterized=True)
+    ax.scatter(test["lon"], test["lat"], s=0.6, color=TEST_COLOR, alpha=0.6, lw=0,
+               rasterized=True)
     ax.set_aspect(1 / np.cos(np.radians(train["lat"].mean())))
-    ax.xaxis.set_major_locator(MaxNLocator(4))
+    ax.xaxis.set_major_locator(MaxNLocator(3))
+    ax.yaxis.set_major_locator(MaxNLocator(5))
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: ps.es_number(v, 2)))
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: ps.es_number(v, 3)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: ps.es_number(v, 2)))
     ax.set_xlabel("Longitud (grados)")
     ax.set_ylabel("Latitud (grados)")
     ax.grid(False)
-    ax.set_title(f"Se entrena con el resto de Bogotá y se predice en Chapinero;\nsolo el "
-                 f"{pct(near.mean())} del train está a menos de {NORTHEAST_RADIUS_M} m del test",
-                 loc="left")
-    legend = ax.legend(loc="lower right", markerscale=8)
-    for handle in legend.legend_handles:
-        handle.set_alpha(1)
+    label_point(ax, test, f"Test: Chapinero\n{ps.es_number(len(test), 0)} anuncios",
+                0.35, (0.9, 0.4))
+    label_point(ax, train, f"Train: resto de Bogotá\n{ps.es_number(len(train), 0)} anuncios",
+                0.85, (0.85, 0.92))
     ps.save(fig, "map_train_test.png")
+
+
+def label_point(ax, points, text, y_frac, quantiles):
+    """Etiqueta directa a la derecha del mapa con una guía gris hasta un punto de la nube
+    (cuantiles de longitud y latitud elegidos para que las guías no se crucen)."""
+    center = (points["lon"].quantile(quantiles[0]), points["lat"].quantile(quantiles[1]))
+    ax.annotate(text, center, xytext=(1.06, y_frac), textcoords="axes fraction",
+                ha="left", va="center", color=ps.ANDES["black"],
+                arrowprops=dict(arrowstyle="-", color=ps.ANDES["mid"], lw=0.6,
+                                shrinkA=2, shrinkB=0))
 
 
 # --- Chapinero frente al resto de Bogotá ---

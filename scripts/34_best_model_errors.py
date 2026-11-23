@@ -31,9 +31,10 @@ import importlib
 
 import numpy as np
 import pandas as pd
+from matplotlib.ticker import MultipleLocator
 
 import plot_style
-from plot_style import FAMILY_COLORS, FAMILY_LABELS, es_number, family_of, millions, plt
+from plot_style import FAMILY_COLORS, es_number, family_of, plt
 from utils import (PROCESSED_DIR, RAW_DIR, TARGET, VIEWS_DIR, load_processed,
                    northeast_holdout, spatial_cv_splits, spatial_groups)
 
@@ -59,10 +60,16 @@ RANKED = {
 COST_RATIOS = (1, 2, 3)
 PRICE_BINS = [0, 400, 500, 700, 900, 1200, np.inf]
 PRICE_LABELS = ["<400", "400-500", "500-700", "700-900", "900-1.200", "1.200+"]
-SEGMENT_TITLES = {"precio_observado": "Precio pedido (M)", "precio_predicho": "Precio predicho (M)",
-                  "area": "Área", "estrato": "Estrato", "tipo": "Tipo", "zona": "Zona espacial",
+SEGMENT_TITLES = {"precio_observado": "Precio pedido (M)",
+                  "precio_predicho": "Precio predicho (M)", "area": "Área del inmueble",
+                  "estrato": "Estrato", "tipo": "Tipo", "zona": "Zona espacial",
                   "año": "Año del anuncio"}
-OVER_COLOR, UNDER_COLOR = "#B2182B", "#2166AC"
+# Etiquetas cortas del eje en la figura de segmentos (los valores del CSV no cambian).
+SEGMENT_TICKS = {"400-500": "400–\n500", "500-700": "500–\n700", "700-900": "700–\n900",
+                 "900-1.200": "900–\n1.200", "anuncio o texto": "anuncio\no texto",
+                 "mismo punto": "mismo\npunto", "apartamento": "aparta-\nmento",
+                 "sin dato": "sin\ndato"}
+OVER_COLOR, UNDER_COLOR = plot_style.OVER_COLOR, plot_style.UNDER_COLOR
 TOP_FEATURES = 12
 FEATURE_LABELS = {
     "txt_ridge": "Texto (ridge TF-IDF)", "surface_pt": "Área (con mismo punto)",
@@ -174,42 +181,33 @@ def segment_order(variable, values):
 def plot_anatomy(table):
     """Sobre y subpredicción media por segmento, con el sesgo y el % sobrepredicho."""
     spatial = table[table["scheme"] == "spatial"]
-    total = spatial[spatial["variable"] == "total"].iloc[0]
     panels = ["precio_observado", "precio_predicho", "area", "tipo", "estrato", "zona"]
-    fig, axes = plt.subplots(2, 3, figsize=(13.5, 7.2), sharey=True)
+    fig, axes = plt.subplots(2, 3, figsize=plot_style.FULL, sharey=True)
     for ax, variable in zip(axes.flat, panels):
         part = spatial[spatial["variable"] == variable].set_index("segment")
         part = part.loc[segment_order(variable, part.index)]
         x = np.arange(len(part))
-        ax.bar(x, part["mean_over"], color=OVER_COLOR, width=0.7, label="Sobrepredicción media")
-        ax.bar(x, -part["mean_under"], color=UNDER_COLOR, width=0.7,
+        ax.bar(x, part["mean_over"] / MILLION, color=OVER_COLOR, width=0.7,
+               label="Sobrepredicción media")
+        ax.bar(x, -part["mean_under"] / MILLION, color=UNDER_COLOR, width=0.7,
                label="Subpredicción media")
-        ax.plot(x, part["bias"], "o", color="black", ms=5, label="Sesgo")
-        for xi, share in zip(x, part["share_over"]):
-            ax.text(xi, 0.97, f"{share * 100:.0f} %", transform=ax.get_xaxis_transform(),
-                    ha="center", va="top", fontsize=8.5, color=OVER_COLOR)
-        ax.axhline(0, color="black", lw=0.6)
-        ax.set_xticks(x, part.index, rotation=30 if len(x) > 5 else 0, ha="right"
-                      if len(x) > 5 else "center", fontsize=9)
+        ax.plot(x, part["bias"] / MILLION, "o", color=plot_style.ANDES["black"], ms=2.5,
+                markeredgewidth=0, label="Sesgo medio")
+        ax.axhline(0, color=plot_style.ANDES["gray"], lw=0.6)
+        labels = [SEGMENT_TICKS.get(s, s) for s in part.index]
+        ax.set_xticks(x, labels, fontsize=7)
+        ax.tick_params(axis="x", length=0)
+        ax.grid(axis="x", visible=False)
         ax.set_title(SEGMENT_TITLES[variable])
-        millions(ax)
-    top = spatial[spatial["variable"] != "total"]["mean_over"].max()
-    axes[0, 0].set_ylim(top=top * 1.25)
+        ax.set_xlim(-0.6, len(x) - 0.4)
+        ax.yaxis.set_major_locator(MultipleLocator(200))
+        ax.yaxis.set_major_formatter(plot_style.es_formatter())
     for ax in axes[:, 0]:
-        ax.set_ylabel("Error medio (millones de pesos)")
-    axes[0, 0].legend(loc="lower left", fontsize=8.5)
-    predicted = spatial[spatial["variable"] == "precio_predicho"].set_index("segment")
-    low, high = predicted.loc[PRICE_LABELS[0], "mean_over"], predicted.loc[PRICE_LABELS[-1],
-                                                                          "mean_over"]
-    fig.suptitle(
-        f"La mezcla 152 sobrepredice el {total['share_over'] * 100:.0f} % de los inmuebles "
-        f"(sesgo de +{es_number(total['bias'] / MILLION, 0)} M), y la sobrepredicción media "
-        f"pasa de {es_number(low / MILLION, 0)} a {es_number(high / MILLION, 0)} M cuando el "
-        "precio predicho sube", fontsize=12.5)
-    fig.text(0.5, -0.01, "Validación espacial fuera de muestra (10 zonas de Bogotá, 5 "
-             "particiones). Arriba de cada barra: % de inmuebles sobrepredichos.",
-             ha="center", fontsize=9)
-    fig.tight_layout()
+        ax.set_ylabel("Error medio (M)")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    order = [1, 2, 0]
+    fig.legend([handles[i] for i in order], [labels[i] for i in order],
+               loc="outside lower center", ncol=3)
     return plot_style.save(fig, "best_errors_segments.png")
 
 
@@ -240,23 +238,21 @@ def importance(train):
 
 
 def plot_importance(table):
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5.6))
+    """Los predictores con más ganancia del boosting, por tipo de inmueble."""
+    fig, axes = plt.subplots(1, 2, figsize=plot_style.FULL, sharex=True)
     for ax, kind in zip(axes, ["apartamento", "casa"]):
         part = table[table["tipo"] == kind].head(TOP_FEATURES).iloc[::-1]
         labels = [FEATURE_LABELS.get(f, f) for f in part["feature"]]
-        ax.barh(labels, part["gain_share"] * 100, color=FAMILY_COLORS["boosting"])
-        for yi, value in enumerate(part["gain_share"] * 100):
-            ax.text(value + 0.4, yi, es_number(value, 1), va="center", fontsize=8.5)
+        share = part["gain_share"].to_numpy() * 100
+        ax.barh(labels, share, color=FAMILY_COLORS["boosting"], height=0.7)
+        ax.text(share[-1] + 0.4, len(share) - 1, f"{es_number(share[-1], 0)} %",
+                va="center", fontsize=7, color=plot_style.ANDES["black"])
         ax.set_title("Apartamentos" if kind == "apartamento" else "Casas")
         ax.set_xlabel("Ganancia (% del total)")
+        ax.tick_params(axis="y", length=0, labelsize=7)
         ax.grid(axis="y", visible=False)
-    top = table[table["tipo"] == "apartamento"].iloc[0]
-    fig.suptitle(f"{FEATURE_LABELS.get(top['feature'], top['feature'])} concentra el "
-                 f"{es_number(top['gain_share'] * 100, 0)} % de la ganancia del boosting en "
-                 "apartamentos", fontsize=12.5)
-    fig.text(0.5, -0.02, "Receta de la 125 (base de la 127) ajustada con todo el train y una "
-             "semilla; ganancia por división de LightGBM.", ha="center", fontsize=9)
-    fig.tight_layout()
+        ax.set_ylim(-0.6, len(share) - 0.4)
+        ax.xaxis.set_major_formatter(plot_style.es_formatter())
     return plot_style.save(fig, "best_errors_importance.png")
 
 
@@ -303,36 +299,25 @@ def ranking(train, oof):
 
 
 def plot_ranking(table):
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5.8))
+    """Costo asimétrico por modelo para k = 1, 2 y 3, en el orden del MAE (k = 1): si el
+    orden cambia, la barra más corta deja de ser la de arriba."""
+    part = table.sort_values("cost_k1", ascending=False).reset_index(drop=True)
+    fig, axes = plt.subplots(1, 3, figsize=plot_style.FULL, sharey=True)
+    y = np.arange(len(part))
     for ax, k in zip(axes, COST_RATIOS):
-        part = table.sort_values(f"cost_k{k}", ascending=False)
-        colors = [FAMILY_COLORS[f] for f in part["family"]]
-        ax.barh(part["label"], part[f"cost_k{k}"], color=colors)
-        for yi, value in enumerate(part[f"cost_k{k}"]):
-            ax.text(value, yi, " " + es_number(value / MILLION, 0), va="center", fontsize=8.5)
-        title = "k = 1 (MAE)" if k == 1 else f"k = {k}: sobrepredecir cuesta {k} veces"
-        ax.set_title(title)
-        ax.set_xlabel("Costo medio (millones de pesos)")
-        ax.set_xlim(0, part[f"cost_k{k}"].max() * 1.18)
-        millions(ax, "x")
+        cost = part[f"cost_k{k}"] / MILLION
+        ax.barh(y, cost, color=[FAMILY_COLORS[f] for f in part["family"]], height=0.7)
+        for i in (cost.idxmin(), part.index[part["model"] == BEST][0]):
+            ax.text(cost[i] + cost.max() * 0.02, i, es_number(cost[i], 0), va="center",
+                    fontsize=7, color=plot_style.ANDES["black"])
+        ax.set_title("k = 1 (MAE)" if k == 1 else f"k = {k}")
+        ax.set_xlim(0, cost.max() * 1.15)
+        ax.xaxis.set_major_formatter(plot_style.es_formatter())
         ax.grid(axis="y", visible=False)
-        ax.tick_params(axis="y", labelsize=9)
-    main = table[table["main_path"]]
-    best = {k: main.loc[main[f"cost_k{k}"].idxmin(), "label"] for k in COST_RATIOS}
-    families = table["family"].drop_duplicates()
-    handles = [plt.Rectangle((0, 0), 1, 1, color=FAMILY_COLORS[f]) for f in families]
-    fig.legend(handles, [FAMILY_LABELS[f] for f in families], loc="lower center",
-               ncol=len(handles), fontsize=9, bbox_to_anchor=(0.5, -0.06))
-    same = (main["rank_k1"] == main["rank_k3"]).all()
-    title = (f"El orden no cambia al castigar la sobrepredicción: {best[1]} gana con k = 1, 2 "
-             "y 3 (ruta principal)" if same else
-             f"Con el MAE gana {best[1]}; si sobrepredecir cuesta 3 veces, gana {best[3]} "
-             "(ruta principal)")
-    fig.suptitle(title, fontsize=12.5)
-    fig.text(0.5, -0.1, "Validación espacial fuera de muestra. Costo = k × sobrepredicción "
-             "+ subpredicción, promedio por inmueble.",
-             ha="center", fontsize=9)
-    fig.tight_layout()
+        ax.tick_params(axis="y", length=0, labelsize=7)
+    axes[1].set_xlabel("Costo medio por inmueble (millones de pesos)")
+    axes[0].set_yticks(y, part["label"])
+    axes[0].set_ylim(-0.6, len(part) - 0.4)
     return plot_style.save(fig, "asymmetric_ranking.png")
 
 

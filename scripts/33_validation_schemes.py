@@ -32,7 +32,6 @@ import importlib
 from itertools import combinations
 
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
 import numpy as np
 import pandas as pd
 
@@ -259,44 +258,61 @@ def level_gap_link(table):
 
 # ---------------------------------------------------------------- figuras
 
-def family_legend(fig, families, **kwargs):
-    """Leyenda por familia con los colores fijos del proyecto."""
-    handles = [plt.Line2D([], [], marker="o", ls="", color=ps.FAMILY_COLORS[f],
-                          label=ps.FAMILY_LABELS[f]) for f in families]
-    fig.legend(handles=handles, **kwargs)
+LABELED = {152: "152", 83: "83", 148: "148"}
+LABEL_SIZE = 7
 
 
-LABEL_OFFSETS = [(4, 2), (4, -10), (-5, 2), (-5, -10), (-2, 6), (-2, -15), (9, -4),
-                 (-10, -4), (4, 10), (-5, 10), (4, -18), (-5, -18)]
+def family_handles(families):
+    """Marcadores de la leyenda por familia, con el color y la forma fijos del proyecto."""
+    return [plt.Line2D([], [], marker=ps.FAMILY_MARKERS[f], ls="", color=ps.FAMILY_COLORS[f],
+                       markeredgewidth=0, label=ps.FAMILY_LABELS[f]) for f in families]
 
 
-def place_labels(ax, xs, ys, texts, fontsize=8):
-    """Etiquetas cerca de cada punto sin chocar entre sí ni con los puntos: para cada una
-    escoge, entre varias posiciones vecinas, la que menos se superpone con lo ya ubicado y
-    penaliza las que quedan más cerca de otro punto que del propio (etiqueta ambigua)."""
+def present_families(data):
+    """Familias presentes, en el orden fijo de la paleta."""
+    return [f for f in ps.FAMILY_COLORS if f in set(data["familia"])]
+
+
+def scatter_families(ax, data, x, y, size=16):
+    """Un punto por envío, con el color y el marcador de su familia y sin borde."""
+    for family, part in data.groupby("familia"):
+        marker = ps.FAMILY_MARKERS[family]
+        ax.scatter(part[x], part[y], s=size * (2 if marker == "*" else 1), marker=marker,
+                   color=ps.FAMILY_COLORS[family], linewidths=0, zorder=3)
+
+
+LABEL_OFFSETS = [(4, 2), (4, -9), (-4, 2), (-4, -9), (0, 5), (0, -12), (7, -4), (-7, -4)]
+
+
+def place_labels(ax, data, x, y, labels):
+    """Etiqueta solo los envíos de 'labels'. Para cada uno escoge, entre posiciones vecinas,
+    la que menos se superpone con los demás puntos y con las etiquetas ya puestas."""
     ax.figure.canvas.draw()
-    points = ax.transData.transform(np.column_stack([xs, ys]))
+    points = ax.transData.transform(data[[x, y]].to_numpy(float))
     scale = ax.figure.dpi / 72
-    placed = [(x - 6, y - 6, x + 6, y + 6) for x, y in points]
-    for k, ((x, y), (xd, yd), text) in enumerate(zip(points, zip(xs, ys), texts)):
-        width, height = 0.62 * fontsize * len(text) * scale, fontsize * scale
-        best, best_cost = None, np.inf
+    frame = ax.get_window_extent()
+    placed = [(px - 4 * scale, py - 4 * scale, px + 4 * scale, py + 4 * scale)
+              for px, py in points]
+    for k, number in enumerate(data["numero"]):
+        if number not in labels:
+            continue
+        text = labels[number]
+        (px, py), width = points[k], 0.55 * LABEL_SIZE * len(text) * scale
+        height = LABEL_SIZE * scale
+        options = []
         for dx, dy in LABEL_OFFSETS:
-            x0 = x + dx * scale - (width if dx < 0 else 0)
-            y0 = y + dy * scale
-            box = (x0, y0, x0 + width, y0 + height)
+            x0 = px + dx * scale - (width if dx < 0 else width / 2 if dx == 0 else 0)
+            box = (x0, py + dy * scale, x0 + width, py + dy * scale + height)
             cost = sum(max(0, min(box[2], b[2]) - max(box[0], b[0]))
                        * max(0, min(box[3], b[3]) - max(box[1], b[1])) for b in placed)
-            center = np.array([(box[0] + box[2]) / 2, (box[1] + box[3]) / 2])
-            distance = np.hypot(*(points - center).T)
-            if np.delete(distance, k).min() < distance[k]:
-                cost += 400
-            if cost < best_cost:
-                best, best_cost = (dx, dy, box), cost
-        dx, dy, box = best
+            if box[0] < frame.x0 or box[2] > frame.x1 or box[1] < frame.y0 or box[3] > frame.y1:
+                cost += 1e6
+            options.append((cost, dx, dy, box))
+        _, dx, dy, box = min(options, key=lambda option: option[0])
         placed.append(box)
-        ax.annotate(text, (xd, yd), xytext=(dx, dy), textcoords="offset points",
-                    fontsize=fontsize, ha="right" if dx < 0 else "left", va="bottom")
+        ax.annotate(text, (data[x].iloc[k], data[y].iloc[k]), xytext=(dx, dy),
+                    textcoords="offset points", fontsize=LABEL_SIZE, color=ps.ANDES["black"],
+                    ha="right" if dx < 0 else "center" if dx == 0 else "left", va="bottom")
 
 
 def kaggle_points(table):
@@ -305,88 +321,69 @@ def kaggle_points(table):
     return data[data["numero"] > 0]
 
 
-def draw_scheme_panels(axes, data, quality, label_size=8, title_size=10,
-                       separator=", "):
-    """Dibuja en cada eje un esquema contra Kaggle, con la línea de 45° y el número del envío."""
+def draw_scheme_panels(axes, data, quality):
+    """Cada eje: un esquema contra Kaggle, con la línea de 45° y el Spearman en el título."""
     stats = quality[quality["conjunto"] == "sin el ingenuo"].set_index("columna")
     for ax, (column, label) in zip(axes, SCHEMES.items()):
-        points = data.dropna(subset=[column])
-        low = 5 * np.floor(points[column].min() / 5) - 5
-        high = max(5 * np.ceil(points[column].max() / 5) + 10, 165)
-        ax.plot([80, 240], [80, 240], color="0.6", lw=1, ls="--")
-        ax.scatter(points[column], points["kaggle"], s=40, zorder=3,
-                   color=[ps.FAMILY_COLORS[f] for f in points["familia"]])
+        points = data.dropna(subset=[column]).reset_index(drop=True)
+        low = 10 * np.floor(points[column].min() / 10) - 5
+        high = max(10 * np.ceil(points[column].max() / 10) + 5, 165)
+        ax.plot([80, 240], [80, 240], color=ps.ANDES["mid"], lw=0.8, ls="--", zorder=1)
+        scatter_families(ax, points, column, "kaggle")
         ax.set_xlim(low, high)
         ax.set_ylim(140, 240)
-        place_labels(ax, points[column].to_numpy(), points["kaggle"].to_numpy(),
-                     points["numero"].astype(str).tolist(), fontsize=label_size)
+        place_labels(ax, points, column, "kaggle", LABELED)
         s = stats.loc[column]
-        ax.set_title(f"{label}\nSpearman {ps.es_number(s['spearman'], 2)} (n = {s['n']})"
-                     f"{separator}brecha media {ps.es_number(s['brecha_media'])} M",
-                     fontsize=title_size)
-        ax.set_xlabel("MAE del esquema (millones)")
-    axes[0].set_ylabel("MAE público en Kaggle (millones)")
-
-
-NOTE_VS_KAGGLE = ("Línea punteada: esquema = Kaggle; encima de ella, el esquema fue optimista "
-                  "con ese envío. Sin el ingenuo 00 (377 M en Kaggle). Cada panel tiene su "
-                  "propio eje horizontal.")
+        ax.set_title(f"{label}\nSpearman {ps.es_number(s['spearman'], 2)} (n = {s['n']})",
+                     fontweight="normal")
+        ax.set_xlabel("MAE del esquema (M)")
+        ax.xaxis.set_major_formatter(ps.es_formatter())
+        ax.yaxis.set_major_formatter(ps.es_formatter())
+    axes[0].set_ylabel("MAE público en Kaggle (M)")
+    edge = axes[0].get_xlim()[1]
+    axes[0].annotate("esquema = Kaggle", (edge, edge), xytext=(-2, 2),
+                     textcoords="offset points", ha="right", va="bottom", fontsize=LABEL_SIZE,
+                     color=ps.ANDES["gray"])
 
 
 def plot_vs_kaggle(table, quality):
     """Un panel por esquema (2 × 2): MAE del esquema contra el puntaje público."""
     data = kaggle_points(table)
-    fig, axes = plt.subplots(2, 2, figsize=(11, 10.5), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(ps.FULL[0], 2 * ps.FULL[1]), sharey=True)
     draw_scheme_panels(axes.flat, data, quality)
-    axes[1, 0].set_ylabel("MAE público en Kaggle (millones)")
-    fig.suptitle("Todos los esquemas son optimistas; el ponderado acierta el nivel de los "
-                 "boosting,\npero no el de la red 148, el lineal, el CART ni los híbridos",
-                 fontsize=13)
-    family_legend(fig, sorted(data["familia"].unique()), loc="lower center", ncol=4,
-                  bbox_to_anchor=(0.5, -0.05))
-    fig.text(0.5, -0.08, NOTE_VS_KAGGLE.replace(" Sin", "\nSin"), ha="center", fontsize=9,
-             color="0.4")
-    fig.tight_layout()
+    axes[1, 0].set_ylabel("MAE público en Kaggle (M)")
+    fig.legend(handles=family_handles(present_families(data)), loc="outside lower center",
+               ncol=4)
     return ps.save(fig, "validation_vs_kaggle.png")
 
 
 def plot_vs_kaggle_wide(table, quality):
-    """La misma figura en una fila, para una diapositiva 16:9 (sin título general)."""
+    """La misma figura en una fila, para una diapositiva 16:9."""
     data = kaggle_points(table)
-    fig, axes = plt.subplots(1, 4, figsize=(14, 4.6), sharey=True)
-    draw_scheme_panels(axes, data, quality, label_size=8, title_size=9.5, separator="\n")
-    families = sorted(data["familia"].unique())
-    family_legend(fig, families, loc="lower center", ncol=len(families),
-                  bbox_to_anchor=(0.5, -0.07), fontsize=9.5, handletextpad=0.2,
-                  columnspacing=1.2)
-    fig.text(0.5, -0.12, NOTE_VS_KAGGLE, ha="center", fontsize=8.5, color="0.4")
-    fig.tight_layout(w_pad=1.5)
+    fig, axes = plt.subplots(1, 4, figsize=ps.FULL_TALL, sharey=True)
+    draw_scheme_panels(axes, data, quality)
+    families = present_families(data)
+    fig.legend(handles=family_handles(families), loc="outside lower center",
+               ncol=4, handletextpad=0.1, columnspacing=1.2)
     return ps.save(fig, "validation_vs_kaggle_wide.png")
 
 
 def plot_rank_corr(quality):
     """Spearman por esquema, con todos sus envíos y en el subconjunto común."""
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=ps.FULL)
     labels = list((SCHEMES | REFERENCE).values())
     x = np.arange(len(labels))
-    subsets = [("todos los del esquema", "0.2"), ("sin el ingenuo", "0.5"),
-               ("comunes a los cuatro esquemas", "0.8")]
-    for offset, (subset, color) in zip([-0.28, 0, 0.28], subsets):
+    subsets = [("todos los del esquema", ps.ANDES["black"]), ("sin el ingenuo", "#7A7A7A"),
+               ("comunes a los cuatro esquemas", ps.ANDES["mid"])]
+    for offset, (subset, color) in zip([-0.27, 0, 0.27], subsets):
         part = quality[quality["conjunto"] == subset].set_index("esquema").loc[labels]
-        bars = ax.bar(x + offset, part["spearman"], width=0.26, color=color, label=subset)
-        for bar, (_, row) in zip(bars, part.iterrows()):
-            ax.annotate(f"{ps.es_number(row['spearman'], 2)}\nn = {row['n']}",
-                        (bar.get_x() + bar.get_width() / 2, max(row["spearman"], 0)),
-                        ha="center", va="bottom", fontsize=8, xytext=(0, 2),
-                        textcoords="offset points")
+        ax.bar(x + offset, part["spearman"], width=0.25, color=color, label=subset)
     ax.set_xticks(x, [label.replace(" ", "\n", 1) for label in labels])
-    ax.set_ylim(0, 1.18)
+    ax.set_ylim(0, 1)
     ax.set_ylabel("Spearman con Kaggle")
-    ax.legend(loc="upper left", ncol=2, fontsize=9)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: ps.es_number(value)))
-    ax.set_title("Con todos sus envíos, el holdout nororiental ordena mejor y la aleatoria "
-                 "simple peor;\nen los 5 envíos comunes la espacial queda arriba, pero n = 5 "
-                 "no alcanza para separarlas")
+    ax.grid(axis="x", visible=False)
+    fig.legend(loc="outside upper center", ncol=3)
+    ax.yaxis.set_major_formatter(ps.es_formatter(1))
     return ps.save(fig, "validation_rank_corr.png")
 
 
@@ -399,95 +396,116 @@ def plot_twins(table, results):
                          "mae_random_twins": base["mae_random_twins"].to_numpy() / MILLION})
     data = pd.concat([table.dropna(subset=["mae_random", "mae_random_twins"]), base])
     data = data[data["numero"] > 0].sort_values("mae_random_twins", ascending=False)
-    fig, ax = plt.subplots(figsize=(9, 5))
-    y = np.arange(len(data))
-    for i, (_, row) in enumerate(data.iterrows()):
-        color = ps.FAMILY_COLORS[row["familia"]]
-        ax.plot([row["mae_random"], row["mae_random_twins"]], [i, i], color=color, lw=2)
-        ax.scatter(row["mae_random"], i, color=color, marker="o", s=50, zorder=3)
-        ax.scatter(row["mae_random_twins"], i, color=color, marker="s", s=50, zorder=3)
-        ax.annotate(f"+{ps.es_number(row['mae_random_twins'] - row['mae_random'])}",
-                    (row["mae_random_twins"], i), xytext=(6, -3), textcoords="offset points",
-                    fontsize=9)
-        if not np.isnan(row["kaggle"]):
-            ax.scatter(row["kaggle"], i, color="0.2", marker="*", s=90, zorder=3)
-    names = {125: "125 boosting sin regla", 127: "127 = 125 + regla de gemelos"}
-    ax.set_yticks(y, [names.get(row.numero,
-                                f"{row.numero} {ps.FAMILY_LABELS[row.familia].lower()}")
-                      for row in data.itertuples()])
-    ax.set_xlabel("MAE (millones)")
-    ax.set_xlim(80, 165)
-    handles = [plt.Line2D([], [], marker=m, ls="", color="0.3", label=l, markersize=s)
-               for m, l, s in [("o", "aleatoria simple", 7), ("s", "aleatoria con gemelos", 7),
-                               ("*", "Kaggle público", 11)]]
-    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=3,
-              fontsize=9)
-    rise = data["mae_random_twins"] - data["mae_random"]
-    by_number = data.set_index("numero")[["mae_random", "mae_random_twins"]]
-    gain = by_number.loc[125] - by_number.loc[127]
-    ax.set_title(f"Separar los gemelos sube la aleatoria entre {rise.min():.0f} y "
-                 f"{rise.max():.0f} M; la regla de gemelos (127) gana\n"
-                 f"{ps.es_number(gain['mae_random'])} M al 125 en la simple y solo "
-                 f"{ps.es_number(gain['mae_random_twins'])} M con gemelos")
+    fig, ax = plt.subplots(figsize=ps.FULL)
+    right_edge = 172
+    for i, row in enumerate(data.itertuples()):
+        color = ps.FAMILY_COLORS[row.familia]
+        ax.plot([row.mae_random, row.mae_random_twins], [i, i], color=color, lw=1.2,
+                solid_capstyle="butt", zorder=2)
+        ax.scatter(row.mae_random, i, color="white", edgecolors=color, marker="o", s=16,
+                   linewidths=1.1, zorder=3)
+        ax.scatter(row.mae_random_twins, i, color=color, marker="o", s=16, linewidths=0,
+                   zorder=3)
+        if not np.isnan(row.kaggle):
+            ax.scatter(row.kaggle, i, color=ps.ANDES["black"], marker="|", s=40,
+                       linewidths=1.2, zorder=3)
+        ax.text(right_edge, i, f"+{ps.es_number(row.mae_random_twins - row.mae_random)}",
+                ha="right", va="center", fontsize=LABEL_SIZE, color=ps.ANDES["gray"])
+    ax.text(right_edge, len(data) - 0.4, "subida (M)", ha="right", va="bottom",
+            fontsize=LABEL_SIZE, color=ps.ANDES["gray"])
+    names = {125: "125 boosting sin regla de gemelos", 127: "127 = 125 + regla de gemelos"}
+    ax.set_yticks(range(len(data)),
+                  [names.get(row.numero, f"{row.numero} {ps.FAMILY_LABELS[row.familia]}")
+                   for row in data.itertuples()])
+    ax.set_ylim(-0.6, len(data) - 0.1)
+    ax.tick_params(axis="y", length=0)
+    ax.grid(axis="y", visible=False)
+    ax.set_xlabel("MAE (millones de pesos)")
+    ax.set_xlim(80, right_edge + 1)
+    ax.xaxis.set_major_formatter(ps.es_formatter())
+    gray = ps.ANDES["gray"]
+    handles = [plt.Line2D([], [], marker="o", ls="", markerfacecolor="white",
+                          markeredgecolor=gray, markeredgewidth=1.1, label="aleatoria simple"),
+               plt.Line2D([], [], marker="o", ls="", color=gray, markeredgewidth=0,
+                          label="aleatoria con gemelos"),
+               plt.Line2D([], [], marker="|", ls="", color=ps.ANDES["black"], markersize=7,
+                          markeredgewidth=1.2, label="Kaggle público")]
+    fig.legend(handles=handles, loc="outside upper center", ncol=3)
     return ps.save(fig, "validation_twins.png")
+
+
+LEVEL_SERIES = [("mae_spatial", "Espacial", ps.ANDES["black"], "o"),
+                ("mae_weighted", "Nororiental ponderado", "#8C8C8C", "s")]
+QUANTILE_SHADES = {53: "#E3C25A", 65: ps.ANDES["accent"]}
+
+
+def plot_level_ladder(ax, results):
+    """Escalera de cuantiles del boosting: sesgo espacial contra MAE en dos esquemas."""
+    ladder = results.loc[list(QUANTILE_LADDER)].assign(q=list(QUANTILE_LADDER.values()))
+    others = results.loc[LOWER_LEVEL]
+    for column, label, color, marker in LEVEL_SERIES:
+        x, y = ladder["bias_spatial"] / MILLION, ladder[column] / MILLION
+        ax.plot(x, y, "-", marker=marker, color=color, lw=1.2, ms=3.5, markeredgewidth=0)
+        ax.annotate(label, (x.iloc[-1], y.iloc[-1]), xytext=(4, 0),
+                    textcoords="offset points", va="center", fontsize=LABEL_SIZE,
+                    color=ps.ANDES["black"])
+        ax.scatter(others["bias_spatial"] / MILLION, others[column] / MILLION, marker="D",
+                   facecolor="white", edgecolor=color, s=12, linewidths=0.9, zorder=3)
+    spatial = ladder["mae_spatial"] / MILLION
+    for row, xi, yi in zip(ladder.itertuples(), ladder["bias_spatial"] / MILLION, spatial):
+        if row.q in (0.60, 0.70, 0.80):
+            ax.annotate(f"q{ps.es_number(row.q, 2)}", (xi, yi), xytext=(-2, 3),
+                        textcoords="offset points", ha="right", fontsize=LABEL_SIZE,
+                        color=ps.ANDES["gray"])
+    for number, xi, yi in zip(others.index, others["bias_spatial"] / MILLION,
+                              others["mae_spatial"] / MILLION):
+        ax.annotate(str(number), (xi, yi), xytext=(0, -10), textcoords="offset points",
+                    fontsize=LABEL_SIZE, color=ps.ANDES["gray"], ha="center")
+    ax.set_xlim(10, 95)
+    ax.set_ylim(115, 165)
+    ax.set_xlabel("Sesgo medio en la espacial (M; + = sobrepredice)")
+    ax.set_ylabel("MAE (millones de pesos)")
+    ax.set_title("Cuantiles 0,60 a 0,80; rombos: 127, 152, 181, 186",
+                 fontweight="normal")
+    for axis in (ax.xaxis, ax.yaxis):
+        axis.set_major_formatter(ps.es_formatter())
+
+
+def plot_level_pair(ax, table):
+    """El mismo boosting con cuantil 0,65 (53) y 0,70 (65) en tres esquemas."""
+    pair = table.set_index("numero").loc[[53, 65]]
+    metrics = [("mae_spatial", "Espacial"), ("mae_weighted", "Ponderado"), ("kaggle", "Kaggle")]
+    x = np.arange(len(metrics))
+    for offset, (number, row) in zip([-0.15, 0.15], pair.iterrows()):
+        values = [row[c] for c, _ in metrics]
+        quantile = "0,65" if number == 53 else "0,70"
+        ax.scatter(x + offset, values, s=22, color=QUANTILE_SHADES[number], linewidths=0,
+                   zorder=3, label=f"{number} (cuantil {quantile})")
+        for xi, value in zip(x + offset, values):
+            # 0,65 a la izquierda del punto y 0,70 encima, para que no choquen.
+            left = number == 53
+            ax.annotate(ps.es_number(value), (xi, value), xytext=(-3, 0) if left else (0, 3),
+                        textcoords="offset points", va="center" if left else "bottom",
+                        ha="right" if left else "center", fontsize=LABEL_SIZE,
+                        color=ps.ANDES["black"])
+    ax.set_xticks(x, [label for _, label in metrics])
+    ax.set_xlim(-0.6, len(metrics) - 0.4)
+    ax.set_ylim(135, 167)
+    ax.set_ylabel("MAE (millones de pesos)")
+    ax.grid(axis="x", visible=False)
+    ax.tick_params(axis="x", length=0)
+    ax.legend(loc="lower right", handletextpad=0.1, borderaxespad=0.2)
+    ax.set_title("Mismo boosting, dos cuantiles", fontweight="normal")
+    ax.yaxis.set_major_formatter(ps.es_formatter())
 
 
 def plot_level(results, table):
     """Escalera de cuantiles: la espacial mejora al bajar el nivel; el ponderado y Kaggle no."""
     results = results.assign(numero=results["model"].map(number_of)).set_index("numero")
-    ladder = results.loc[list(QUANTILE_LADDER)].assign(q=list(QUANTILE_LADDER.values()))
-    others = results.loc[LOWER_LEVEL]
-    fig, (left, right) = plt.subplots(1, 2, figsize=(12.5, 5.2),
-                                      gridspec_kw={"width_ratios": [1.4, 1]})
-    for column, label, color, marker in [("mae_spatial", "espacial", "0.1", "o"),
-                                         ("mae_weighted", "nororiental ponderado", "0.55", "s")]:
-        x, y = ladder["bias_spatial"] / MILLION, ladder[column] / MILLION
-        left.plot(x, y, "-", marker=marker, color=color,
-                  label=f"{label}: cuantiles 0,60 a 0,80 (la 83 es 0,70)")
-        for (_, row), xi, yi in zip(ladder.iterrows(), x, y):
-            left.annotate(f"q{ps.es_number(row['q'], 2)}", (xi, yi), fontsize=8, color=color,
-                          xytext=(5, -12 if column == "mae_spatial" else 6),
-                          textcoords="offset points")
-        x, y = others["bias_spatial"] / MILLION, others[column] / MILLION
-        left.scatter(x, y, marker="D", facecolor="white", edgecolor=color, s=45, zorder=3)
-        for number, xi, yi in zip(others.index, x, y):
-            left.annotate(str(number), (xi, yi), xytext=(0, -14), textcoords="offset points",
-                          fontsize=8, color=color, ha="center")
-    left.set_xlim(10, 85)
-    left.set_ylim(118, 163)
-    left.set_xlabel("Sesgo medio en la espacial (millones; positivo = sobrepredice)")
-    left.set_ylabel("MAE (millones)")
-    left.legend(fontsize=8, loc="lower right")
-    q60, q70 = ladder.loc[154], ladder.loc[83]
-    left.set_title(
-        f"Del cuantil 0,70 al 0,60 la espacial baja "
-        f"{ps.es_number((q70['mae_spatial'] - q60['mae_spatial']) / MILLION)} M y el ponderado"
-        f" sube {ps.es_number((q60['mae_weighted'] - q70['mae_weighted']) / MILLION)} M;\n"
-        f"rombos: 127, 152 y los de nivel más bajo 181 y 186", fontsize=10)
-
-    pair = table.set_index("numero").loc[[53, 65]]
-    metrics = [("mae_spatial", "Espacial"), ("mae_weighted", "Ponderado"), ("kaggle", "Kaggle")]
-    x = np.arange(len(metrics))
-    for offset, (number, row), color in zip([-0.2, 0.2], pair.iterrows(), ["0.7", "0.3"]):
-        values = [row[c] for c, _ in metrics]
-        bars = right.bar(x + offset, values, width=0.38, color=color,
-                         label=f"{number} (cuantil {'0,65' if number == 53 else '0,70'})")
-        for bar, value in zip(bars, values):
-            right.annotate(ps.es_number(value), (bar.get_x() + bar.get_width() / 2, value),
-                           ha="center", va="bottom", fontsize=8, xytext=(0, 2),
-                           textcoords="offset points")
-    columns = [c for c, _ in metrics]
-    gap = pair.loc[65, columns] - pair.loc[53, columns]
-    right.set_xticks(x, [label for _, label in metrics])
-    right.set_ylim(120, 170)
-    right.set_ylabel("MAE (millones)")
-    right.legend(fontsize=8, loc="upper left")
-    right.set_title(f"Mismo boosting, dos cuantiles: la espacial prefiere el 0,65\n"
-                    f"por {ps.es_number(gap['mae_spatial'])} M; Kaggle, el 0,70 por "
-                    f"{ps.es_number(-gap['kaggle'])} M", fontsize=10)
-    fig.suptitle("La espacial premia bajar el nivel de las predicciones; el tablero no",
-                 fontsize=13)
-    fig.tight_layout()
+    fig, (left, right) = plt.subplots(1, 2, figsize=ps.FULL,
+                                      gridspec_kw={"width_ratios": [1.3, 1]})
+    plot_level_ladder(left, results)
+    plot_level_pair(right, table)
     return ps.save(fig, "validation_level.png")
 
 

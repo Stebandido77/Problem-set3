@@ -205,7 +205,7 @@ RECORD_CHANGES = {
     0: "Mediana constante",
     10: "Boosting con coordenadas",
     32: "Nivel × 1,15 sobre la 10 (calibración)",
-    53: "Un modelo por tipo, precio en nivel,\ncuantil 0,65 y sin OSM",
+    53: "Un modelo por tipo, precio en nivel, q0,65, sin OSM",
     65: "Cuantil 0,70",
     75: "Texto completo (ridge sobre TF-IDF)",
     83: "Estrato y valor del terreno, 10 semillas",
@@ -227,25 +227,24 @@ def records(kaggle):
 def plot_kaggle_progression(kaggle):
     data = records(kaggle).reset_index(drop=True)
     y = np.arange(len(data))[::-1]
-    fig, ax = plt.subplots(figsize=(10, 5.6))
+    fig, ax = plt.subplots(figsize=ps.FULL)
     for yi, row in zip(y, data.itertuples()):
         family = family_from_name(row.model)
-        ax.barh(yi, row.public_mae, color=ps.FAMILY_COLORS[family], height=0.65)
+        ax.barh(yi, row.public_mae, color=ps.FAMILY_COLORS[family], height=0.62, lw=0)
         ax.text(row.public_mae + 4 * M, yi, ps.es_number(row.public_mae / M), va="center",
-                fontsize=10, weight="bold")
+                color=ps.ANDES["black"])
     labels = [f"{n:02d}  {RECORD_CHANGES[n]}" for n in data["number"]]
-    ax.set_yticks(y, labels, fontsize=10)
+    ax.set_yticks(y, labels)
+    ax.tick_params(axis="y", length=0)
     ps.millions(ax, "x")
-    ax.set_xlim(0, data["public_mae"].max() * 1.12)
-    ax.set_xlabel("MAE público en Kaggle (millones de pesos)")
+    ax.set_xlim(0, data["public_mae"].max() * 1.1)
+    ax.set_ylim(-0.6, len(data) - 0.4)
+    ax.set_xlabel("MAE público en Kaggle (millones de $)")
     ax.grid(axis="y", visible=False)
     families = list(dict.fromkeys(family_from_name(m) for m in data["model"]))
-    handles = [plt.Rectangle((0, 0), 1, 1, color=ps.FAMILY_COLORS[f]) for f in families]
-    ax.legend(handles, [ps.FAMILY_LABELS[f] for f in families], loc="lower right")
-    first, last = data.iloc[0], data.iloc[-1]
-    ax.set_title(f"El MAE público baja de {ps.es_number(first.public_mae / M)} a "
-                 f"{ps.es_number(last.public_mae / M)} M; el texto y la mezcla con la red "
-                 "dan los últimos saltos", loc="left")
+    handles = [plt.Rectangle((0, 0), 1, 1, color=ps.FAMILY_COLORS[f], lw=0) for f in families]
+    ax.legend(handles, [ps.FAMILY_LABELS[f] for f in families], loc="lower right",
+              handlelength=1, handleheight=0.8)
     ps.save(fig, "kaggle_progression.png")
 
 
@@ -272,32 +271,38 @@ def common_recipe(results):
 
 
 def plot_common_recipe(results):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5.6), sharey=True)
+    """Flecha de cada familia desde su versión inicial hasta la mejor, con el boosting 83 de
+    referencia. El número del modelo va junto a cada extremo, por fuera de la flecha."""
+    fig, axes = plt.subplots(1, 2, figsize=ps.FULL, sharey=True)
     y = np.arange(len(RECIPE))[::-1]
+    gray = ps.ANDES["gray"]
     for ax, metric, label in [(axes[0], "mae_weighted", "Holdout ponderado"),
                               (axes[1], "mae_spatial", "Validación espacial")]:
+        values = [results.loc[n, metric] for _, b, _, a in RECIPE for n in (b, a)]
+        pad = 0.04 * (max(values) - min(values))
         for yi, (family, before, _, after) in zip(y, RECIPE):
             color = ps.FAMILY_COLORS[family]
             start, end = results.loc[before, metric], results.loc[after, metric]
             ax.annotate("", xy=(end, yi), xytext=(start, yi),
-                        arrowprops=dict(arrowstyle="-|>", color=color, lw=2))
-            ax.scatter(start, yi, s=50, facecolor="white", edgecolor=color, zorder=3, lw=1.5)
-            ax.text(start + 2 * M, yi + 0.22, f"{before:02d}", fontsize=9, color="#555555")
-            ax.text(end - 2 * M, yi + 0.22, str(after), fontsize=9, color=color, ha="right")
+                        arrowprops=dict(arrowstyle="-|>,head_length=0.4,head_width=0.2",
+                                        color=color, lw=1.4, shrinkA=0, shrinkB=0))
+            ax.plot(start, yi, "o", color=color, ms=3.5, mec="none")
+            ax.text(start + pad, yi, f"{before:02d}", color=gray, va="center", fontsize=7)
+            ax.text(end - pad, yi, str(after), color=gray, va="center", ha="right", fontsize=7,
+                    bbox=dict(fc="white", ec="none", pad=0.3), zorder=4)
         ref = results.loc[REFERENCE, metric]
-        ax.axvline(ref, color=ps.FAMILY_COLORS["boosting"], ls="--", lw=1.5)
-        values = [results.loc[n, metric] for _, b, _, a in RECIPE for n in (b, a)] + [ref]
-        ax.set_xlim(min(values) - 8 * M, max(values) + 6 * M)
-        ax.text(ref, -0.55, f"boosting 83\n{ps.es_number(ref / M)}",
-                color=ps.FAMILY_COLORS["boosting"], ha="right", va="bottom", fontsize=9)
+        ax.axvline(ref, color=ps.ANDES["gray"], ls="--", lw=0.8)
+        ax.text(ref, 1.0, f"boosting 83: {ps.es_number(ref / M)}",
+                transform=ax.get_xaxis_transform(), color=gray, ha="center", va="bottom",
+                fontsize=7)
+        ax.set_xlim(min(values + [ref]) - 7 * pad, max(values) + 5 * pad)
         ps.millions(ax, "x")
-        ax.set_xlabel(f"{label}: MAE (millones de pesos)")
+        ax.set_xlabel(f"{label}: MAE (millones de $)")
         ax.grid(axis="y", visible=False)
     axes[0].set_yticks(y, [ps.FAMILY_LABELS[f] for f, *_ in RECIPE])
-    axes[0].set_ylim(-0.6, len(RECIPE) - 0.3)
-    fig.suptitle("La receta común mejora todas las familias; solo la red supera al boosting "
-                 "83, y solo en el ponderado", x=0.01, ha="left", fontsize=12)
-    fig.tight_layout()
+    axes[0].tick_params(axis="y", length=0)
+    axes[1].tick_params(axis="y", length=0)
+    axes[0].set_ylim(-0.5, len(RECIPE) - 0.5)
     ps.save(fig, "common_recipe.png")
 
 
@@ -357,32 +362,38 @@ def blend_table(results):
 
 
 def plot_blend(table):
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5.6), sharey=True)
+    """Correlación del error con la 127 frente a la ganancia de mezclar 70/30, por validación.
+    La red 148 lleva etiqueta directa; las demás familias se leen en la leyenda común."""
+    fig, axes = plt.subplots(1, 2, figsize=ps.FULL, sharey=True)
     panels = [(axes[0], "corr_error_spatial", "ganancia_spatial", "Validación espacial"),
               (axes[1], "corr_error_northeast", "ganancia_weighted", "Holdout ponderado")]
     for ax, x, y, label in panels:
-        ax.axhline(0, color="black", lw=0.8)
-        ax.axhspan(-NOISE_M, NOISE_M, color="#EEEEEE", zorder=0)
+        ax.axhspan(-NOISE_M, NOISE_M, color=ps.ANDES["light"], lw=0, zorder=0)
+        ax.axhline(0, color=ps.ANDES["gray"], lw=0.6, zorder=1)
         for row in table.itertuples():
-            color = ps.FAMILY_COLORS[row.family_key]
-            ax.scatter(getattr(row, x), getattr(row, y), s=90, color=color, zorder=3)
-            offset = (-28, 6) if row.numero == 108 else (6, 4)
-            ax.annotate(str(row.numero), (getattr(row, x), getattr(row, y)), xytext=offset,
-                        textcoords="offset points", fontsize=10, color=color)
+            ax.plot(getattr(row, x), getattr(row, y), ls="", ms=5, mec="none", zorder=3,
+                    marker=ps.FAMILY_MARKERS[row.family_key],
+                    color=ps.FAMILY_COLORS[row.family_key])
+        net = table.set_index("numero").loc[148]
+        ax.annotate(f"red 148: {ps.es_number(net[y])} M", (net[x], net[y]), xytext=(-6, -2),
+                    textcoords="offset points", ha="right", va="center", fontsize=7,
+                    color=ps.ANDES["black"])
+        ax.xaxis.set_major_formatter(ps.es_formatter(2))
         ax.set_xlabel("Correlación del error con el boosting 127")
-        ax.set_title(label, fontsize=11)
-    axes[0].text(0.02, NOISE_M - 0.2, "ruido (± 2 M)", transform=axes[0].get_yaxis_transform(),
-                 fontsize=9, color="#777777", va="top")
-    axes[0].set_ylabel("MAE de la mezcla 70/30 menos el de la 127\n(millones de pesos; < 0 ayuda)")
+        ax.set_title(label, loc="left")
+    axes[0].set_ylabel("Cambio de MAE al mezclar\n(millones de $; < 0 mejora)")
+    axes[0].yaxis.set_major_locator(plt.MultipleLocator(2))
+    axes[0].yaxis.set_major_formatter(ps.es_formatter(0))
+    axes[0].text(0.02, -NOISE_M, "ruido (± 2 M)", transform=axes[0].get_yaxis_transform(),
+                 fontsize=7, color=ps.ANDES["gray"], va="bottom")
     families = list(dict.fromkeys(table["family_key"]))
-    handles = [plt.Line2D([], [], marker="o", ls="", color=ps.FAMILY_COLORS[f]) for f in families]
-    labels = [f"{ps.FAMILY_LABELS[f]} ({', '.join(map(str, table.loc[table.family_key == f, 'numero']))})"
+    handles = [plt.Line2D([], [], ls="", ms=5, mec="none", marker=ps.FAMILY_MARKERS[f],
+                          color=ps.FAMILY_COLORS[f]) for f in families]
+    labels = [f"{ps.FAMILY_LABELS[f]} "
+              f"{', '.join(map(str, table.loc[table.family_key == f, 'numero']))}"
               for f in families]
-    fig.legend(handles, labels, loc="lower center", ncol=4, fontsize=9, bbox_to_anchor=(0.5, -0.08))
-    net = table.set_index("numero").loc[148]
-    fig.suptitle(f"Solo la red mejora al boosting en una mezcla 70/30, y solo en el ponderado "
-                 f"({ps.es_number(net.ganancia_weighted)} M)", x=0.01, ha="left", fontsize=12)
-    fig.tight_layout()
+    fig.legend(handles, labels, loc="outside lower center", ncol=len(families),
+               handletextpad=0.2, columnspacing=1.0)
     ps.save(fig, "family_blend_with_127.png")
 
 
@@ -408,25 +419,36 @@ def test_range(results):
 
 
 def plot_test_range(table):
+    """Predicción máxima en el test por modelo frente al tope del train. Cada barra lleva su
+    máximo y, si llega al tope o lo pasa, cuántas predicciones lo hacen."""
     data = table.sort_values("max_test")
     y = np.arange(len(data))
-    fig, ax = plt.subplots(figsize=(10, 5.6))
+    cap = CAP / M
+    longest = data["max_test"].max()
+    fig, ax = plt.subplots(figsize=ps.FULL)
     ax.barh(y, data["max_test"], color=[ps.FAMILY_COLORS[f] for f in data["family_key"]],
-            height=0.65)
+            height=0.62, lw=0)
     for yi, row in zip(y, data.itertuples()):
-        detail = (f"{row.n_en_1650} pegadas al tope" if np.isclose(row.max_test, CAP / M)
-                  else f"{ps.es_number(row.pct_sobre_1650, 1)} % > tope")
-        ax.text(max(row.max_test, CAP / M) + 60, yi, f"{ps.es_number(row.max_test, 0)} M  "
-                f"({detail})", va="center", fontsize=9)
-    ax.axvline(CAP / M, color="black", ls="--", lw=1.2)
-    ax.text(CAP / M, len(data) - 0.4, " tope del train", fontsize=9, va="bottom")
-    ax.set_yticks(y, [f"{r.familia} ({r.numero:02d})" for r in data.itertuples()])
-    ax.set_xlim(0, data["max_test"].max() * 1.28)
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: ps.es_number(v, 0)))
-    ax.set_xlabel("Predicción máxima en el test (millones de pesos)")
+        text = f"{ps.es_number(row.max_test, 0)} M"
+        if np.isclose(row.max_test, cap):
+            text += f": {row.n_en_1650} en el tope"
+        elif row.max_test > cap:
+            text += f": {ps.es_number(row.pct_sobre_1650, 1)} % sobre el tope"
+        inside = row.max_test == longest
+        ax.text(row.max_test - 40 if inside else max(row.max_test, cap) + 40, yi, text,
+                va="center",
+                ha="right" if inside else "left", fontsize=7,
+                color="white" if inside else ps.ANDES["black"])
+    ax.axvline(cap, color=ps.ANDES["black"], ls="--", lw=0.8)
+    ax.text(cap + 40, len(data) - 0.55, f"tope del train: {ps.es_number(cap, 0)} M", fontsize=7,
+            color=ps.ANDES["gray"], va="bottom")
+    ax.set_yticks(y, [f"{r.familia} {r.numero:02d}" for r in data.itertuples()], fontsize=7)
+    ax.tick_params(axis="y", length=0)
+    ax.set_xlim(0, longest * 1.02)
+    ax.set_ylim(-0.6, len(data) + 0.2)
+    ax.xaxis.set_major_formatter(ps.es_formatter(0))
+    ax.set_xlabel("Predicción máxima en el test (millones de $)")
     ax.grid(axis="y", visible=False)
-    ax.set_title("Los árboles apenas tocan el tope de 1.650 M; las redes y las partes "
-                 "lineales en logaritmos lo pasan", loc="left")
     ps.save(fig, "family_test_range.png")
 
 
@@ -451,6 +473,10 @@ NEGATIVE = [  # categoría, fila, referencia, descripción
     ("kNN", 185, 127, "kNN cuantílico por tipo (40 vecinos)"),
 ]
 
+# Las ideas no son familias: todas van en negro y se distinguen por el marcador.
+NEGATIVE_MARKERS = {"OpenStreetMap": "s", "Modelo local": "o", "Apilamiento": "^",
+                    "Balanceo": "D", "Monotonía": "v", "kNN": "X"}
+
 
 def negative_results(results):
     """Efecto de cada idea en espacial y ponderado frente a su referencia."""
@@ -471,26 +497,43 @@ def negative_results(results):
 
 def plot_negative(table):
     assert not table["mejora_ambos"].any(), "Hay una idea que mejora los dos criterios"
-    data = table.iloc[::-1].reset_index(drop=True)
-    y = np.arange(len(data))
-    fig, ax = plt.subplots(figsize=(10, 5.6))
-    ax.axvspan(-NOISE_M, NOISE_M, color="#EEEEEE", zorder=0)
-    ax.axvline(0, color="black", lw=0.8)
-    ax.scatter(data["delta_spatial"], y, s=60, color="#222222", label="Δ MAE espacial", zorder=3)
-    ax.scatter(data["delta_weighted"], y, s=60, marker="s", facecolor="white",
-               edgecolor="#222222", lw=1.5, label="Δ MAE ponderado", zorder=3)
-    labels = [f"{r.categoria}: {r.fila} vs {r.referencia}"
-              + (" (sin espacial)" if np.isnan(r.delta_spatial) else "")
-              for r in data.itertuples()]
-    ax.set_yticks(y, labels, fontsize=9)
-    ax.set_xscale("symlog", linthresh=10)
+    """Cada idea es un punto: cambio de MAE espacial (x) frente al ponderado (y). La esquina
+    que mejora los dos por más del ruido queda vacía. Las ideas sin validación espacial van
+    en una franja aparte a la izquierda, con el mismo eje y."""
+    fig, (side, ax) = plt.subplots(1, 2, figsize=ps.FULL, sharey=True,
+                                   gridspec_kw={"width_ratios": [1, 9]})
+    has_spatial = table["delta_spatial"].notna()
+    categories = list(dict.fromkeys(table["categoria"]))
+    for category in categories:
+        rows = table[table["categoria"] == category]
+        style = dict(ls="", ms=5, mec="none", marker=NEGATIVE_MARKERS[category],
+                     color=ps.ANDES["black"])
+        ax.plot(rows["delta_spatial"], rows["delta_weighted"], label=category, **style)
+        missing = rows[rows["delta_spatial"].isna()]
+        side.plot(np.zeros(len(missing)), missing["delta_weighted"], **style)
+    for panel in (side, ax):
+        panel.axhspan(-NOISE_M, NOISE_M, color=ps.ANDES["light"], lw=0, zorder=0)
+        panel.axhline(0, color=ps.ANDES["gray"], lw=0.6, zorder=1)
+    ax.axvspan(-NOISE_M, NOISE_M, color=ps.ANDES["light"], lw=0, zorder=0)
+    ax.axvline(0, color=ps.ANDES["gray"], lw=0.6, zorder=1)
+    ax.set_xscale("symlog", linthresh=10, linscale=1.5)
     ax.set_xticks([-10, -5, 0, 5, 10, 20, 50])
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: ps.es_number(v, 0)))
-    ax.set_xlabel("Cambio de MAE frente a la referencia (millones de pesos; > 0 empeora)")
-    ax.grid(axis="y", visible=False)
-    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=2)
-    ax.set_title(f"Ninguna de estas {len(table)} ideas mejora a la vez la espacial y el "
-                 f"ponderado por más de {ps.es_number(NOISE_M, 0)} M", loc="left", pad=28)
+    ax.xaxis.set_major_formatter(ps.es_formatter(0))
+    ax.yaxis.set_major_formatter(ps.es_formatter(0))
+    low = min(table["delta_spatial"].min(), table["delta_weighted"].min()) * 1.3
+    ax.set_xlim(low, table["delta_spatial"].max() * 1.3)
+    ax.set_ylim(low * 0.6, table["delta_weighted"].max() * 1.12)
+    ax.fill_between([low, -NOISE_M], low, -NOISE_M, color=ps.UNDER_COLOR, alpha=0.12, lw=0)
+    ax.text(low * 0.95, -NOISE_M - 0.6, "mejora ambas: vacío", color=ps.ANDES["gray"],
+            fontsize=7, va="top")
+    ax.set_xlabel("Cambio de MAE espacial (millones de $; > 0 empeora)")
+    side.set_ylabel("Cambio de MAE ponderado\n(millones de $; > 0 empeora)")
+    side.set_xlim(-1, 1)
+    side.set_xticks([0], ["sin\nespacial"])
+    side.tick_params(axis="x", length=0)
+    side.grid(axis="x", visible=False)
+    ax.legend(loc="upper left", ncol=2, handletextpad=0.2, columnspacing=1.0)
+    print(f"Negativos: {(~has_spatial).sum()} ideas sin validación espacial")
     ps.save(fig, "negative_results.png")
 
 

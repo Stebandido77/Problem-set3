@@ -39,8 +39,10 @@ DISCOUNTS = np.round(np.arange(0, 0.201, 0.01), 2)
 MARKED_DISCOUNTS = (0.0, 0.05, 0.10, 0.15, 0.20)
 KAGGLE_RULE = "152 (Kaggle, q0,70)"
 # Tonos del color del boosting, del cuantil más bajo (claro) al más alto (oscuro).
-QUANTILE_COLORS = {"q0,20": "#FDAE6B", "q0,30": "#F16913", "q0,50": "#C04A04",
-                   "q0,70 (127)": "#6B2402"}
+QUANTILE_COLORS = {"q0,20": "#E8C866", "q0,30": "#C79A00", "q0,50": "#8F6F00",
+                   "q0,70 (127)": "#574300"}
+RULE_LABELS = {"q0,20": "cuantil 0,20", "q0,30": "cuantil 0,30", "q0,50": "cuantil 0,50",
+               "q0,70 (127)": "cuantil 0,70 (127)", KAGGLE_RULE: "mezcla 152 (Kaggle)"}
 
 
 def candidate_rules(train, oof):
@@ -120,55 +122,35 @@ def segment_table(train, price, pred, label, discount):
     return pd.DataFrame(rows)
 
 
-def frontier_title(table, kaggle):
-    """Hallazgo: el modelo de Kaggle sin descuento y, si existe, el cuantil más bajo sin
-    descuento frente a la 152 con el descuento que cierra un porcentaje parecido."""
-    head = (f"Ofrecer lo que predice el modelo de Kaggle cierra el "
-            f"{es_number(kaggle['share_closed'] * 100, 0)} % de los anuncios con un sobrepago "
-            f"de {es_number(kaggle['overpay_share_capital'] * 100, 0)} % del capital")
-    low = table[(table["rule"] == "q0,20") & (table["discount"] == 0)]
-    if low.empty:
-        return head
-    low = low.iloc[0]
-    ref = table[table["rule"] == KAGGLE_RULE]
-    ref = ref.loc[(ref["share_closed"] - low["share_closed"]).abs().idxmin()]
-    return (f"{head};\ncon el cuantil 0,20 se cierra el "
-            f"{es_number(low['share_closed'] * 100, 0)} % "
-            f"con {es_number(low['overpay_share_capital'] * 100, 0)} %, menos que con la 152 y "
-            f"{ref['discount'] * 100:.0f} % de descuento "
-            f"({es_number(ref['share_closed'] * 100, 0)} % y "
-            f"{es_number(ref['overpay_share_capital'] * 100, 0)} %)")
-
-
 def plot_frontier(table):
-    fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.6))
-    metrics = [("mean_overpay", "Sobrepago medio por compra cerrada (M)", MILLION),
-               ("overpay_share_capital", "Sobrepago como % del capital desembolsado", 0.01)]
+    """Frontera entre compras cerradas y sobrepago; cada línea es una regla y cada punto
+    marcado un descuento (0 % a la derecha, 20 % a la izquierda)."""
+    fig, axes = plt.subplots(1, 2, figsize=plot_style.FULL)
+    metrics = [("mean_overpay", "Sobrepago medio por compra (M)", MILLION),
+               ("overpay_share_capital", "Sobrepago (% del capital)", 0.01)]
+    kaggle = table[(table["rule"] == KAGGLE_RULE) & (table["discount"] == 0)].iloc[0]
     for ax, (metric, ylabel, scale) in zip(axes, metrics):
         for rule, part in table.groupby("rule", sort=False):
             color = QUANTILE_COLORS.get(rule, FAMILY_COLORS["ensemble"])
-            style = "--" if rule == KAGGLE_RULE else "-"
+            style = (0, (3, 1.5)) if rule == KAGGLE_RULE else "-"
             x, y = part["share_closed"] * 100, part[metric] / scale
-            ax.plot(x, y, style, color=color, lw=1.8, label=rule)
+            ax.plot(x, y, color=color, ls=style, lw=1.2, label=RULE_LABELS[rule])
             marked = part["discount"].isin(MARKED_DISCOUNTS)
-            ax.plot(x[marked], y[marked], "o", color=color, ms=4.5)
-        kaggle = table[(table["rule"] == KAGGLE_RULE) & (table["discount"] == 0)].iloc[0]
+            ax.plot(x[marked], y[marked], "o", color=color, ms=2.5, markeredgewidth=0)
         kx, ky = kaggle["share_closed"] * 100, kaggle[metric] / scale
-        ax.plot(kx, ky, "*", color="black", ms=15, zorder=5)
-        ax.annotate("Modelo de Kaggle\nsin descuento", (kx, ky), xytext=(-12, 8),
-                    textcoords="offset points", ha="right", fontsize=9)
+        ax.plot(kx, ky, "*", color=FAMILY_COLORS["ensemble"], ms=8, markeredgewidth=0,
+                zorder=5)
+        ax.annotate("152 sin\ndescuento", (kx, ky), xytext=(-5, 3), textcoords="offset points",
+                    ha="right", va="bottom", fontsize=7, color=plot_style.ANDES["black"])
         ax.set_xlabel("Compras cerradas (% de los anuncios)")
         ax.set_ylabel(ylabel)
-        ax.set_xlim(left=0)
-        ax.set_ylim(0, (table[metric] / scale).max() * 1.18)
-        ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.set_xlim(0, (table["share_closed"] * 100).max() * 1.05)
+        ax.set_ylim(0, (table[metric] / scale).max() * 1.15)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=5, integer=True))
         ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: es_number(v, 0)))
-    axes[0].legend(title="Regla de oferta", fontsize=9, title_fontsize=9, loc="upper left")
-    fig.suptitle(frontier_title(table, kaggle), fontsize=12.5)
-    fig.text(0.5, -0.02, "Validación espacial fuera de muestra. Oferta = predicción × (1 − "
-             "descuento); se cierra si la oferta ≥ precio pedido. Puntos: descuentos de 0, 5, "
-             "10, 15 y 20 % (de derecha a izquierda).", ha="center", fontsize=9)
-    fig.tight_layout()
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: es_number(v, 0)))
+    fig.legend(*axes[0].get_legend_handles_labels(), loc="outside lower center", ncol=5,
+               handlelength=1.8, columnspacing=1.2)
     return plot_style.save(fig, "purchase_rule_frontier.png")
 
 
