@@ -3,7 +3,7 @@
 %%  Plantilla Beamer Uniandes (beamerthemeUniandes.sty, sin cambios).
 %%  Compilar con LuaLaTeX:  latexmk -lualatex compare_equipo_06.tex
 %%  Las cifras y tablas salen de generated/ (scripts/36_build_presentations.py);
-%%  las figuras, de ../views/ (scripts 31 a 35). Notas del orador: notas_compare.md.
+%%  las figuras, de ../views/ (scripts 32 y 33). Notas del orador: notas_compare.md.
 %% ============================================================
 \documentclass[aspectratio=169,11pt]{beamer}
 \input{preamble}
@@ -17,7 +17,9 @@
 \date[Nov.\ 2026]{Bogotá, noviembre de 2026}
 
 \newcommand{\twolines}[2]{\begin{tabular}[t]{@{}c@{}}#1\\#2\end{tabular}}
-\newcommand{\slidefig}[1]{\centering\includegraphics[width=\textwidth]{#1}\par}
+% Figura a casi todo el ancho y, debajo, las viñetas que dicen qué mirar en ella.
+\newcommand{\figslide}[2][0.88]{\centering\includegraphics[width=#1\textwidth]{#2}\par\vspace{2pt}}
+\newenvironment{lookat}{\begin{itemize}\small\setlength{\itemsep}{1pt}}{\end{itemize}}
 
 \begin{document}
 
@@ -27,86 +29,134 @@
  \end{frame}}
 
 % 1 ---------------------------------------------------------------
-\begin{frame}{El mejor modelo mezcla un boosting y una red neuronal}
-  \vspace*{0pt}{\small Boosting cuantílico (70\,\%) y red neuronal cuantílica (30\,\%), con
-  un modelo para apartamentos y otro para casas, entrenados en el resto de Bogotá.\par}
+\begin{frame}{La mezcla de boosting y red quedó primera en los dos tableros}
   \vfill
   \begin{columns}[T]
-    \column{0.32\textwidth}\centering \keyfig{\KagBest\ M}{MAE público en Kaggle}
-    \column{0.32\textwidth}\centering \keyfig{−\GainNaive}{\twolines{frente a predecir la mediana}{(\KagNaive\ M)}}
-    \column{0.32\textwidth}\centering \keyfig{\SpatialBest\ M}{\twolines{MAE en zonas que no vio}{(validación espacial)}}
+    \column{0.32\textwidth}\centering \keyfig{\KagBest\ M}{\twolines{tablero público}{(\SharePublic\ del test)}}
+    \column{0.32\textwidth}\centering \keyfig{\KagPrivate\ M}{\twolines{tablero privado, 1.\textsuperscript{er} puesto}{(\GapSecond\ M sobre el segundo)}}
+    \column{0.32\textwidth}\centering \keyfig{\SpatialBest\ M}{\twolines{validación espacial: zonas}{que no vio al entrenar}}
   \end{columns}
   \vfill
-  \takeaway{La mezcla le gana \GainBoost\ M en Kaggle al mejor boosting solo (\KagBoost\ M).}
+  \begin{itemize}\small
+    \item MAE: error promedio en pesos entre el precio predicho y el observado.
+    \item Boosting: muchos árboles pequeños; cada uno corrige el error del anterior.
+    \item Red neuronal: modelo que puede predecir por encima de los precios que vio.
+    \item Mezcla: promedio ponderado de los dos, 70\,\% boosting y 30\,\% red.
+  \end{itemize}
+  \vfill
 \end{frame}
 
 % 2 ---------------------------------------------------------------
-\begin{frame}{El boosting gana en la validación espacial y en Kaggle}
-  \vfill
-  \centering\footnotesize
+\begin{frame}{El boosting gana la espacial y el tablero; la red, el ponderado}
+  \centering\scriptsize
   \input{generated/tabla_familias}
-  \par\vspace{4pt}{\scriptsize\color{andesgray} MAE en millones de pesos; menos es mejor. La elastic net no se subió a Kaggle.}
+  \par\vspace{2pt}{\scriptsize\color{andesgray} MAE en millones de pesos; menos es mejor. La elastic net no se subió a Kaggle.}
   \vfill
-  \takeaway{La red solo gana en el holdout ponderado, que la favorece.}
+  \begin{itemize}\small
+    \item Gemelos: validación aleatoria (anuncios al azar de zonas ya vistas), con las copias juntas.
+    \item Ponderado: holdout al lado de Chapinero, con los pesos del test.
+    \item La red gana el ponderado, pero en el tablero queda detrás del boosting.
+    \item Sin ponderado para la 203: BETO se afinó con precios de ese holdout.
+  \end{itemize}
+  \vfill
 \end{frame}
 
 % 3 ---------------------------------------------------------------
-\begin{frame}{La receta común mejora todas las familias}
-  \slidefig{common_recipe}
-  \takeaway{En el holdout ponderado ganan entre \RecipeGainMin\ y \RecipeGainMax\ M, pero el boosting sigue adelante.}
+\begin{frame}{Los árboles no predicen por encima del tope del train; la red sí}
+  \figslide{family_test_range}
+  \begin{lookat}
+    \item Línea punteada: el precio más alto del train, 1.650 M.
+    \item CART (\MaxCart\ M) y bosque (\MaxForest\ M) quedan bajo el tope: un árbol promedia lo que vio.
+    \item La red 148 llega a \MaxNet\ M: por eso aporta en los inmuebles caros.
+  \end{lookat}
 \end{frame}
 
 % 4 ---------------------------------------------------------------
-\begin{frame}{Los árboles no pasan el tope de precios del train}
-  \slidefig{family_test_range}
-  \takeaway{La lineal viaja mal por sus coordenadas: sin ellas, la espacial baja de \LinSpatial\ a \LinNoGeoSpatial\ M.}
+\begin{frame}{La red mejora la mezcla; el bosque comete los mismos errores}
+  \figslide{family_blend_with_127}
+  \begin{lookat}
+    \item Cada punto: mezcla 70/30 del boosting 127 con otra familia; abajo es mejor.
+    \item Bosque: correlación de errores de \CorrForest; el ponderado cambia \BlendForestGain\ M.
+    \item Red: correlación de \CorrNet\ y buena sola; el ponderado cambia \BlendNetGain\ M.
+  \end{lookat}
 \end{frame}
 
 % 5 ---------------------------------------------------------------
-\begin{frame}{La red mejora la mezcla porque llega a la cola alta}
-  \slidefig{family_blend_with_127}
-  \takeaway{Con la red, el ponderado de la mezcla cambia \BlendNetGain\ M; con el bosque, \BlendForestGain\ M.}
+\begin{frame}{La receta común mejora a todas las familias}
+  \figslide{common_recipe}
+  \begin{lookat}
+    \item Receta: por tipo, precio en pesos, cuantil 0,70, estrato, terreno y ridge del texto.
+    \item Cuantil 0,70: apuntar a un precio que el 70\,\% de los parecidos no supera.
+    \item Todas ganan entre \RecipeGainMin\ y \RecipeGainMax\ M en el ponderado; en la espacial, ninguna pasa al 83.
+  \end{lookat}
 \end{frame}
 
 % 6 ---------------------------------------------------------------
-\begin{frame}{Ninguna de estas \NNegative\ ideas mejoró los dos criterios}
-  \slidefig{negative_results}
-  \takeaway{OpenStreetMap empeora la espacial: en Chapinero casi todo está cerca.}
+\begin{frame}{BETO mejora a los dos miembros de la mezcla}
+  \vfill
+  \centering\footnotesize
+  \input{generated/tabla_beto}
+  \par\vspace{2pt}{\scriptsize\color{andesgray} Validación espacial, MAE en millones de pesos.}
+  \vfill
+  \begin{itemize}\small
+    \item Ridge sobre TF-IDF: regresión que le pone un peso a cada palabra del anuncio.
+    \item BETO: modelo de lenguaje en español, afinado aquí para estimar el precio desde el texto.
+    \item Con BETO junto al ridge, la mezcla baja \GainBetoKaggle\ M en el tablero público.
+    \item Solo lo probamos en el boosting y la red, no en las demás familias.
+  \end{itemize}
+  \vfill
 \end{frame}
 
 % 7 ---------------------------------------------------------------
-\begin{frame}{El holdout junto a Chapinero ordena mejor los envíos}
-  \centering\includegraphics[width=0.9\textwidth]{validation_vs_kaggle_wide}\par
-  \takeaway{La aleatoria simple es la que peor ordena (Spearman \SpRandom).}
+\begin{frame}{Todos los esquemas son optimistas frente al tablero}
+  \figslide[0.8]{validation_vs_kaggle_wide}
+  \begin{lookat}
+    \item Validación aleatoria: probar en anuncios al azar, de las mismas zonas que ya vio.
+    \item Puntos sobre la diagonal: el esquema promete menos error que el tablero público.
+    \item Spearman (1 = mismo orden que el tablero): aleatoria \SpRandom, espacial \SpSpatial.
+  \end{lookat}
 \end{frame}
 
 % 8 ---------------------------------------------------------------
 \begin{frame}{Los anuncios repetidos inflan la validación aleatoria}
-  \slidefig{validation_twins}
-  \takeaway{Con los gemelos juntos, el MAE de la mezcla sube de \RandomBest\ a \TwinsBest\ M.}
+  \figslide{validation_twins}
+  \begin{lookat}
+    \item Círculo vacío: aleatoria simple; lleno: gemelos en la misma partición; raya: tablero.
+    \item Con los gemelos juntos, el MAE de la mezcla 152 sube de \RandomBefore\ a \TwinsBefore\ M.
+    \item Aun así, todos quedan lejos del tablero: Chapinero es otra zona.
+  \end{lookat}
 \end{frame}
 
 % 9 ---------------------------------------------------------------
-\begin{frame}{La validación espacial premia bajar el nivel; Kaggle no}
-  \slidefig{validation_level}
-  \takeaway{Usamos la espacial para ordenar y el ponderado y Kaggle para el nivel.}
+\begin{frame}{La validación espacial premia bajar el nivel; el tablero no}
+  \figslide{validation_level}
+  \begin{lookat}
+    \item Izquierda: con menos sesgo (cuantil más bajo), el MAE espacial baja.
+    \item El ponderado casi no cambia entre los cuantiles 0,60 y 0,70.
+    \item Derecha: el 0,65 gana en la espacial, pero no en el tablero (\KagQsixtyfive\ frente a \KagStepC\ M).
+  \end{lookat}
 \end{frame}
 
 % 10 --------------------------------------------------------------
-\begin{frame}{Si sobrepredecir cuesta más, ganan los de nivel bajo}
-  \slidefig{asymmetric_ranking}
-  \takeaway{El modelo para Kaggle y el modelo para comprar no tienen por qué ser el mismo.}
+\begin{frame}{Ninguna de las \NNegative\ variantes mejoró los dos criterios a la vez}
+  \figslide{negative_results}
+  \begin{lookat}
+    \item Cada punto: una variante frente a su referencia; a la derecha o arriba es peor.
+    \item La esquina de abajo a la izquierda, que mejora ambas, está vacía.
+    \item OpenStreetMap empeora la espacial (\OsmSpatial\ M): en Chapinero casi todo queda cerca.
+  \end{lookat}
 \end{frame}
 
 % 11 --------------------------------------------------------------
-\begin{frame}{El boosting es la base y la red aporta en la cola alta}
+\begin{frame}{Cada familia gana en algo y paga en otra cosa}
   \begin{itemize}
-    \item El boosting por tipo gana en la espacial, con gemelos y en Kaggle.
-    \item La receta común mejora a todas las familias, pero no cierra la brecha.
-    \item La red sirve en la mezcla porque predice por encima del tope.
-    \item Ningún esquema basta: escogimos con los tres y confirmamos en Kaggle.
+    \item Boosting: el mejor en zonas que no vio, pero no pasa el tope del train.
+    \item Red neuronal: pasa el tope, pero sola es peor en el tablero (\KagNet\ M).
+    \item Regresión lineal: fácil de leer, pero viaja mal a Chapinero (\KagLinear\ M).
+    \item BETO: lee mejor el texto, pero exige GPU y su ponderado no es limpio.
   \end{itemize}
-  \takeaway{La ventaja es del algoritmo, no solo de la receta.}
+  \vfill
+  \takeaway{El mejor modelo para el tablero no es el mejor para comprar: si sobrepagar cuesta el triple, la 203 cae al puesto \BestRankKthree.}
 \end{frame}
 
 \andesclosing{¡Gracias!}{Equipo 06 · MECA 4107}
