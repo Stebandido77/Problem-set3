@@ -258,7 +258,7 @@ def level_gap_link(table):
 
 # ---------------------------------------------------------------- figuras
 
-LABELED = {152: "152", 83: "83", 148: "148"}
+LABELED = {203: "203", 152: "152", 83: "83", 148: "148"}
 LABEL_SIZE = 7
 
 
@@ -281,7 +281,10 @@ def scatter_families(ax, data, x, y, size=16):
                    color=ps.FAMILY_COLORS[family], linewidths=0, zorder=3)
 
 
-LABEL_OFFSETS = [(4, 2), (4, -9), (-4, 2), (-4, -9), (0, 5), (0, -12), (7, -4), (-7, -4)]
+LABEL_OFFSETS = [(4, 2), (4, -9), (-4, 2), (-4, -9), (0, 5), (0, -12), (7, -4), (-7, -4),
+                 (10, 8), (10, -16), (-10, 8), (-10, -16)]
+# Posición fija para la 203, que queda junto a la 152 en la espacial.
+PREFERRED_OFFSET = {203: (-4, -9)}
 
 
 def place_labels(ax, data, x, y, labels):
@@ -300,7 +303,8 @@ def place_labels(ax, data, x, y, labels):
         (px, py), width = points[k], 0.55 * LABEL_SIZE * len(text) * scale
         height = LABEL_SIZE * scale
         options = []
-        for dx, dy in LABEL_OFFSETS:
+        offsets = [PREFERRED_OFFSET[number]] if number in PREFERRED_OFFSET else LABEL_OFFSETS
+        for dx, dy in offsets:
             x0 = px + dx * scale - (width if dx < 0 else width / 2 if dx == 0 else 0)
             box = (x0, py + dy * scale, x0 + width, py + dy * scale + height)
             cost = sum(max(0, min(box[2], b[2]) - max(box[0], b[0]))
@@ -331,7 +335,8 @@ def draw_scheme_panels(axes, data, quality):
         ax.plot([80, 240], [80, 240], color=ps.ANDES["mid"], lw=0.8, ls="--", zorder=1)
         scatter_families(ax, points, column, "kaggle")
         ax.set_xlim(low, high)
-        ax.set_ylim(140, 240)
+        ax.set_ylim(130, 240)
+        ax.set_yticks(range(140, 241, 20))
         place_labels(ax, points, column, "kaggle", LABELED)
         s = stats.loc[column]
         ax.set_title(f"{label}\nSpearman {ps.es_number(s['spearman'], 2)} (n = {s['n']})",

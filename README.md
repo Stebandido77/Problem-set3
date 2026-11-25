@@ -14,22 +14,32 @@ modelo lo suficiente para comprar, sabiendo que sobrepredecir cuesta más que su
 
 ## Resultados principales
 
-Cifras en millones de pesos. Salen de `views/family_table.csv`, `views/validation_schemes.csv`
-y `views/kaggle_scores.csv`.
+Cifras en millones de pesos. Salen de `views/family_table.csv`, `views/validation_schemes.csv`,
+`views/beto_table.csv`, `views/kaggle_scores.csv` y `views/kaggle_final.csv`.
 
-**Mejor modelo: `152_ensemble_w70_30_2`**, la mezcla del boosting 127 (70 %) y la red
-neuronal 148 (30 %), con **148,2 M en el tablero público** (148.209.395), frente a 377,1 M del
-ingenuo (mediana constante) y 152,1 M del mejor boosting solo (83). Es el envío con el menor
-puntaje público de los 19 registrados.
+**Mejor modelo: `203_ensemble_w70_30_2`**, la mezcla del boosting 198 (70 %) y la red
+neuronal 196 (30 %), los dos con BETO y el ridge como lectores del texto. **Quedó en el
+primer puesto de los dos tableros de Kaggle:**
 
-- **Boosting 127:** LightGBM con pérdida cuantílica en 0,70 sobre el precio en nivel, un
-  modelo para apartamentos y otro para casas, con estrato y valor del terreno de la manzana,
-  el texto completo del anuncio resumido en un ridge fuera de muestra, el área y los baños de
-  los anuncios del mismo punto, sin latitud ni longitud crudas, 10 semillas y una regla que
-  mezcla la predicción con el precio de anuncios de train con la misma descripción.
-- **Red 148:** red cuantílica (0,70) por tipo con los mismos predictores de la manzana y el
-  ridge del texto, sin coordenadas. Es la única familia que predice por encima del tope de
-  precios del train (1.650 M), y por eso mejora la mezcla.
+| Tablero | Parte del test | MAE | Puesto |
+|---|---:|---:|---:|
+| Público | 20 % | 145,7 (145.654.598) | 1 |
+| Privado (definitivo) | 80 % | 148,6 (148.551.335) | 1; el segundo, 150,8 (150.790.433) |
+
+Del público al privado el MAE sube 2,9 M (2,0 %). En la validación espacial propia la 203
+da 124,8 M, optimista frente a los dos tableros. Frente al ingenuo (mediana constante,
+377,1 M en el público) el error baja 61 %; frente a la mezcla anterior sin BETO (152,
+148,2 M), 2,6 M.
+
+- **Boosting 198:** la receta de la 127 (LightGBM con pérdida cuantílica en 0,70 sobre el
+  precio en nivel, un modelo para apartamentos y otro para casas, estrato y valor del
+  terreno de la manzana, el texto completo resumido en un ridge fuera de muestra, el área y
+  los baños de los anuncios del mismo punto, sin latitud ni longitud crudas, 10 semillas y
+  la regla que mezcla la predicción con el precio de anuncios de train con la misma
+  descripción) más el precio que predice BETO con el texto (`txt_beto`).
+- **Red 196:** la red cuantílica (0,70) por tipo de la 148, con los mismos predictores de la
+  manzana, el ridge del texto y `txt_beto`, sin coordenadas. Es la única familia que predice
+  por encima del tope de precios del train (1.650 M), y por eso mejora la mezcla.
 
 Una fila por familia (su mejor especificación con la receta común):
 
@@ -42,16 +52,19 @@ Una fila por familia (su mejor especificación con la receta común):
 | Boosting | 127 | sin sintonizar (TPE y CMA-ES en la 98 no mejoraron en Kaggle) | 89,0 | 110,2 | 127,0 | 155,5 | sin envío |
 | Boosting | 83 | igual que la 127 | 96,2 | 111,0 | 131,5 | 154,8 | 152,1 |
 | Red neuronal | 148 | sin sintonizar (TPE en la 171: mejor espacial, peor ponderado) | 118,0 | 124,8 | 137,6 | 148,2 | 157,1 |
-| **Mezcla** | **152** | pesos fijos 70/30 | 95,5 | 112,2 | 127,6 | 151,7 | **148,2** |
+| Mezcla | 152 | pesos fijos 70/30 | 95,5 | 112,2 | 127,6 | 151,7 | 148,2 |
+| **Mezcla con BETO** | **203** | pesos fijos 70/30 (se comparó con 60/40) | – | – | **124,8** | 150,5* | **145,7** |
 
-**Candidatos con BETO, todavía sin puntaje en Kaggle** (`views/beto_table.csv`, ronda 11 en
-`EXPERIMENTOS.md`). Sumar al ridge el precio que predice BETO con el texto mejora los dos
-modelos de la mezcla en la espacial: el boosting pasa de 127,0 a 124,4 (198) y la red de
-137,6 a 133,7 (196). La mezcla 70/30 de ambos (203, recortada al rango del train en la 206)
-da 124,8 en la espacial y 150,5 en el ponderado, frente a 127,6 y 151,7 de la 152, con una
-media en test de 881 M. El ponderado de estas filas es optimista: BETO se entrenó con precios
-de la validación nororiental, incluidos los de más de 1.000 M que ese holdout deja fuera
-del ajuste. Hasta ver su puntaje público, el mejor modelo sigue siendo la 152.
+\* Optimista: BETO se afinó con precios de la validación nororiental, incluidos los de más de
+1.000 M que ese holdout deja fuera del ajuste. La 203 no tiene validación aleatoria.
+
+**Qué aportó BETO** (`views/beto_check.csv`, `views/beto_deciles.csv`, `views/beto_table.csv`;
+ronda 11 en `EXPERIMENTOS.md`). Como lector del texto solo, fuera de muestra con las mismas
+particiones, BETO se equivoca 148,5 M y el ridge 169,1 M; el ridge acierta más en los
+deciles de precio 4 a 8 y BETO en los extremos. Sumado al ridge, mejora los dos modelos de la
+mezcla en la espacial: el boosting pasa de 127,0 a 124,4 (198) y la red de 137,6 a 133,7
+(196). La mezcla 70/30 de ambos (203) da 124,8 en la espacial frente a 127,6 de la 152, y
+en el tablero público 145,7 frente a 148,2.
 
 Los hiperparámetros de cada familia y el detalle de cada búsqueda están en
 `views/family_table.csv` (columnas `hiperparametros` y `busqueda`). Ojo: la elastic net,
@@ -62,9 +75,10 @@ muestra.
 
 - **Validación** (`views/validation_rank_corr.csv`, sin el ingenuo): frente a Kaggle, la
   aleatoria simple es la que peor ordena los envíos (Spearman 0,44, n = 13); con los anuncios gemelos
-  en la misma partición sube a 0,78; la espacial da 0,69 (n = 15) y el holdout nororiental
-  ponderado 0,83 (n = 12). Todas son optimistas; la espacial, en unos 27 M. La espacial
-  premia bajar el nivel de las predicciones y el tablero no.
+  en la misma partición sube a 0,78; la espacial da 0,74 (n = 16, con la 203) y el holdout
+  nororiental ponderado 0,83 (n = 12; la 203 no entra: su ponderado, optimista, no está en `cv_results.csv`).
+  Todas son optimistas; la espacial, en unos 26 M. La espacial premia bajar el nivel de las
+  predicciones y el tablero no.
 - **Asimetría y regla de compra:** ver la sección "Del modelo a la decisión de compra".
 
 ## Del modelo a la decisión de compra
@@ -73,19 +87,21 @@ Con las predicciones fuera de muestra de la validación espacial (`34_best_model
 y `35_purchase_rule.py`; tablas `views/best_errors_*.csv`, `views/asymmetric_ranking.csv` y
 `views/purchase_rule*.csv`). Cifras en millones.
 
-**Dónde se equivoca la 152.** Sobrepredice el 67,3 % de los inmuebles, con un sesgo de
-+41,7 M; la sobrepredicción media es de 125,9 M y la subpredicción media de 131,3 M. Por
+**Dónde se equivoca la 203.** Sobrepredice el 66,6 % de los inmuebles, con un sesgo de
++39,4 M; la sobrepredicción media es de 123,3 M y la subpredicción media de 127,9 M. Por
 precio pedido, sobrepredice el 92 % de los de menos de 400 M y solo el 18 % de los de más
-de 1.200 M (sesgo de −213 M). Por precio predicho, que es lo que ve el comprador, la
-sobrepredicción media sube de 37 M a 214 M. El error es mayor en casas (MAE 181,3 frente a
-110,3 en apartamentos) y cuando falta el área (145,6 frente a 119,0). En el boosting, el
-ridge del texto concentra el 22 % de la ganancia en apartamentos y el 14 % en casas
-(`views/best_errors_importance.csv`, un ajuste con una semilla).
+de 1.200 M (sesgo de −205 M). Por precio predicho, que es lo que ve el comprador, la
+sobrepredicción media sube de 37 M a 213 M. El error es mayor en casas (MAE 175,7 frente a
+108,3 en apartamentos) y cuando falta el área (141,7 frente a 117,0). En el boosting sin
+BETO (la receta de la 125), el ridge del texto concentra el 22 % de la ganancia en
+apartamentos y el 14 % en casas (`views/best_errors_importance.csv`, un ajuste con una
+semilla; no se recalculó con BETO).
 
 **Pérdida asimétrica.** Si sobrepredecir cuesta 2 o 3 veces lo que subpredecir, el orden
 entre familias no cambia, pero ganan los cuantiles bajos: con k = 3 el mejor es el boosting
-en cuantil 0,20 (190, costo 174,0) y la 152 queda sexta (297,0). Es lo que predice la teoría:
-con costo k veces mayor, el cuantil óptimo es 1/(1 + k).
+en cuantil 0,20 (190, costo 174,0) y la 203 queda sexta (289,1). Es lo que predice la teoría:
+con costo k veces mayor, el cuantil óptimo es 1/(1 + k). Los cuantiles bajos (190 a 192)
+son el boosting sin BETO.
 
 **Regla de compra.** La empresa ofrece la predicción con un descuento y compra si la oferta
 alcanza el precio pedido; la diferencia es sobrepago. La receta del boosting 127 se entrenó
@@ -93,9 +109,9 @@ con cuantiles 0,20, 0,30 y 0,50 (filas 190 a 192, con la misma regla de gemelos)
 
 | Regla | Descuento | Compras cerradas | Sobrepago medio | Sobrepago / capital |
 |---|---:|---:|---:|---:|
-| 152 (Kaggle, cuantil 0,70) | 0 % | 67,3 % | 125,9 | 18,3 % |
-| 152 (Kaggle, cuantil 0,70) | 10 % | 45,9 % | 98,3 | 15,5 % |
-| 152 (Kaggle, cuantil 0,70) | 20 % | 25,1 % | 79,9 | 13,6 % |
+| 203 (Kaggle, cuantil 0,70) | 0 % | 66,6 % | 123,3 | 18,0 % |
+| 203 (Kaggle, cuantil 0,70) | 10 % | 45,4 % | 94,9 | 15,1 % |
+| 203 (Kaggle, cuantil 0,70) | 20 % | 23,6 % | 79,3 | 13,5 % |
 | Cuantil 0,50 | 0 % | 52,7 % | 98,1 | 15,5 % |
 | Cuantil 0,30 | 0 % | 40,5 % | 77,0 | 13,2 % |
 | Cuantil 0,20 | 0 % | 33,0 % | 66,9 | 12,1 % |
@@ -113,8 +129,9 @@ casas), y cerrar después de una tasación física. No lo usaríamos en casas ni
 predicciones por encima de 900 M, donde la sobrepredicción media pasa de 200 M. Riesgos:
 (i) los precios son de oferta y no de cierre, así que el sobrepago real puede ser mayor;
 (ii) falta el área en uno de cada cuatro anuncios y ahí el error es mayor; (iii) los datos
-son de 2019 a 2021; (iv) cambio de zona: la espacial (127,6) es optimista frente a Kaggle
-(148,2), y en el holdout junto a Chapinero el sesgo cambia de signo (−57,2), así que el
+son de 2019 a 2021; (iv) cambio de zona: la espacial (124,8) es optimista frente a Kaggle
+(145,7 en el público y 148,6 en el privado), y en el holdout junto a Chapinero el sesgo
+cambia de signo (−53,3), así que el
 nivel correcto en Chapinero es incierto; (v) la regla (cuantil y segmento) se escogió con
 las mismas predicciones espaciales con que se reporta, así que su sobrepago es algo
 optimista. La validación espacial premia bajar el nivel (el
@@ -131,15 +148,18 @@ bash run_all.sh            # Linux / macOS / Git Bash
 
 `run_all` es la ruta principal: desde los datos crudos de `stores/raw` reproduce los modelos
 ingenuos, la mejor especificación de cada familia (108, 104, 105, 114, 83 y 125 → 127, 148),
-la mezcla final 152, dos comparaciones que usan las presentaciones (el kNN 185 y la mezcla
-186, de la 177 → 181 con la red 148), los tres cuantiles de la regla de compra (190 a 192) y
-todas las figuras y tablas de `views/` que usan las presentaciones, que se arman al final en
-`document/`. Una corrida completa desde cero en un clon limpio (sin los predictores
-procesados, con las descargas externas versionadas) tardó 2 h 15 min en un portátil con
-Windows 11 y CPU, y reprodujo los 17 envíos de la ruta principal (3 ingenuos y 14
-modelos, entre ellos la 152) con los mismos precios al peso: `save_submission` no creó
-ninguna versión `_v2` nueva. Las cifras de validación de `views/cv_results.csv` también
-coinciden; solo cambian los minutos de cada ajuste.
+la mezcla 152, dos comparaciones que usan las presentaciones (el kNN 185 y la mezcla
+186, de la 177 → 181 con la red 148), el mejor modelo en Kaggle (194 → 198 y 196, mezclados
+en la 203, con la predicción de BETO versionada), los tres cuantiles de la regla de compra
+(190 a 192) y todas las figuras y tablas de `views/` que usan las presentaciones, que se
+arman al final en `document/`. Una corrida completa desde cero en un clon limpio (sin los
+predictores procesados, con las descargas externas versionadas) tardó 2 h 15 min en un
+portátil con Windows 11 y CPU, y reprodujo los 17 envíos de la ruta principal de entonces
+(3 ingenuos y 14 modelos, entre ellos la 152) con los mismos precios al peso:
+`save_submission` no creó ninguna versión `_v2` nueva. Las cifras de validación de
+`views/cv_results.csv` también coinciden; solo cambian los minutos de cada ajuste. El paso
+de la 203 se agregó a `run_all` después de esa corrida y todavía no se ha corrido desde cero
+dentro de la ruta; sus comandos son los de la ronda 11 de `EXPERIMENTOS.md`.
 
 Notas:
 
@@ -159,7 +179,7 @@ Notas:
 - **Presentaciones.** Son Beamer con la plantilla de los Andes (`document/*.tex`).
   `36_build_presentations.py` escribe desde `views/` las cifras, las tablas y las notas del
   orador, y compila con LuaLaTeX (`latexmk -lualatex`). Las figuras son los PDF vectoriales
-  que dejan en `views/` los scripts 31 a 35. Sin LaTeX instalado, genera todo menos los PDF.
+  que dejan en `views/` los scripts 31 a 35 y 41. Sin LaTeX instalado, genera todo menos los PDF.
 - **Predictor de BETO (`txt_beto`).** Es el log del precio que predice
   [BETO](https://huggingface.co/dccuchile/bert-base-spanish-wwm-uncased)
   (`dccuchile/bert-base-spanish-wwm-uncased`) afinado con el título y la descripción. Se
@@ -189,16 +209,18 @@ Notas:
 │   ├── 13_text_embeddings.py  embeddings del texto (los usa el bosque 114)
 │   ├── 04_train_models.py     todas las especificaciones; validación y envíos
 │   ├── 20_twin_rules.py       regla de anuncios repetidos (125 → 127)
-│   ├── 06_ensemble.py         mezclas con pesos fijos (152)
+│   ├── 06_ensemble.py         mezclas con pesos fijos (152, 203)
+│   ├── 38_beto_check.py       verifica la predicción de BETO y la compara con el ridge
 │   ├── 07_results_table.py    tabla de resultados en Markdown
 │   ├── 31_data_overview.py    Etapa 1: precios, faltantes, mapa, Chapinero contra Bogotá
 │   ├── 32_algorithm_comparison.py  Etapa 2: familias, progresión, receta, negativos
 │   ├── 33_validation_schemes.py    Etapa 3: aleatoria, espacial, ponderado y Kaggle
 │   ├── 34_best_model_errors.py     Etapa 4: anatomía del error, importancia, pérdida asimétrica
 │   ├── 35_purchase_rule.py         Etapa 4: regla de compra por cuantil y descuento
+│   ├── 41_beto_figure.py           BETO contra el ridge por decil de precio
 │   ├── 36_build_presentations.py   las dos presentaciones
 │   │   — experimentos (ver EXPERIMENTOS.md) —
-│   ├── 37_beto_input.py, beto_kaggle.py, 38_beto_check.py   predictor de BETO (Kaggle, GPU)
+│   ├── 37_beto_input.py, beto_kaggle.py   entrada y afinado de BETO (Kaggle, GPU)
 │   ├── 39_beto_table.py, 40_clip_range.py   tabla de la ronda de BETO y recorte al rango
 │   └── 05, 08–10, 12, 14, 15, 17–19, 21–25, 27–30
 ├── stores/
@@ -240,13 +262,15 @@ No se versionan y se regeneran con los scripts: `stores/processed/oof_prediction
 Predictores externos y de texto, con su fuente, su intuición económica y si entran al mejor
 modelo: `views/predictors_table.csv` (resumen en `views/predictors_summary.png`). La mezcla
 152 usa 6 externos (estrato y valor del terreno de la manzana, distancias a 4 hitos) y 19 de
-texto. Los 16 de OpenStreetMap se construyeron y se probaron, pero empeoraron la validación
+texto; la 203 agrega a esos el precio que predice BETO. Los 16 de OpenStreetMap se construyeron y se probaron, pero empeoraron la validación
 espacial y quedaron fuera (`views/negative_results.csv`).
 
 ## Envíos a Kaggle
 
-Puntaje público de cada envío subido (`views/kaggle_scores.csv`), en millones. Los envíos 10
-y 11 se subieron sin OSM; sus archivos están en `stores/submissions/obsoletos/`.
+Puntaje de cada envío subido (`views/kaggle_scores.csv`), en millones. Los envíos 10 y 11 se
+subieron sin OSM; sus archivos están en `stores/submissions/obsoletos/`. La competencia ya
+cerró: el puntaje privado (80 % del test) solo está registrado para el envío final, la 203;
+la posición en los dos tableros está en `views/kaggle_final.csv`.
 
 | Envío | Familia | Kaggle público |
 |---|---|---:|
@@ -265,12 +289,14 @@ y 11 se subieron sin OSM; sus archivos están en `stores/submissions/obsoletos/`
 | `98_boosting_ext_core_coords_by_type_level_q70_ridge_type_net_s10_tpe` | boosting | 153,4 |
 | `75_boosting_core_coords_by_type_level_q70_ridge_v2` | boosting | 153,1 |
 | `83_boosting_ext_core_coords_by_type_level_q70_ridge_s10_v2` | boosting | 152,1 |
-| **`152_ensemble_w70_30_2`** | **mezcla** | **148,2** |
+| `152_ensemble_w70_30_2` | mezcla | 148,2 |
+| **`203_ensemble_w70_30_2`** | **mezcla con BETO** | **145,7** (privado: 148,6; 1.er puesto en los dos) |
 
-Son 16 modelos más tres calibraciones (abajo): 19 envíos registrados. **El taller pide al menos
-20 y al menos uno por familia: falta subir la elastic net** (por ejemplo
-`104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned.csv`) y registrar
-cualquier envío subido que no esté en `views/kaggle_scores.csv`.
+Son 17 modelos más tres calibraciones (abajo): 20 envíos registrados. El taller pide al menos
+uno por familia: la elastic net no tiene puntaje registrado en `views/kaggle_scores.csv`
+(por ejemplo
+`104_elastic_net_ext_core_coords_splines_by_type_level_q70_ridge_tuned.csv`). Si se subió
+algún envío que no está en ese archivo, falta registrarlo.
 
 ### Sondeos y calibraciones con el tablero (no son modelos)
 

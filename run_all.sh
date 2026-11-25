@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ruta principal: de los datos crudos a los envíos finales y al material de las dos
 # presentaciones. Reproduce los modelos ingenuos, el mejor modelo de cada familia, la mezcla
-# final (152) y todas las figuras y tablas de document/. Los demás experimentos (rondas 1
+# final (203) y todas las figuras y tablas de document/. Los demás experimentos (rondas 1
 # a 10) están en EXPERIMENTOS.md, con sus comandos y su tabla de resultados.
 #
 # Uso:  bash run_all.sh                    # usa las descargas externas ya versionadas
@@ -46,6 +46,18 @@ fi
     181_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10_twin_mix \
     148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
 
+# 3c. Mejor modelo en Kaggle: la 203 mezcla el boosting 198 (la 194 con la regla de
+#     gemelos) y la red 196, los dos con el precio que predice BETO junto al ridge. BETO
+#     corre en Kaggle con GPU (beto_kaggle.py); su salida está versionada en
+#     stores/processed/beto_predictions.csv y 38 la verifica.
+"$PYTHON" 38_beto_check.py
+"$PYTHON" 04_train_models.py --specs 194 196 --schemes spatial northeast
+"$PYTHON" 20_twin_rules.py --rules mix --numbers 198 \
+    --model 194_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10
+"$PYTHON" 06_ensemble.py --number 203 --how weighted --weights 0.7 0.3 --models \
+    198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix \
+    196_quantile_net_ext_core_coords_by_type_q70_ridge_beto_nocoords
+
 # 4. La receta de la 125 con cuantiles 0,20, 0,30 y 0,50 para la regla de compra.
 "$PYTHON" 04_train_models.py --specs 190 191 192 --schemes spatial --no-submission
 "$PYTHON" 07_results_table.py
@@ -56,4 +68,5 @@ fi
 "$PYTHON" 32_algorithm_comparison.py
 "$PYTHON" 34_best_model_errors.py
 "$PYTHON" 35_purchase_rule.py
+"$PYTHON" 41_beto_figure.py
 "$PYTHON" 36_build_presentations.py

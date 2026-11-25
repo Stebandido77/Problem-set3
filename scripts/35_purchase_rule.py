@@ -7,13 +7,13 @@ paga lo que ofrece y que el precio pedido es el valor del inmueble.
 
 Reglas comparadas: la receta de la 125 con cuantil 0,20, 0,30 y 0,50 (filas 190 a 192) y
 0,70 (la 127), todas con la regla 'mix' de gemelos de 20_twin_rules.py como la 127, y la
-mezcla 152 (el mejor modelo en Kaggle). Descuentos de 0 % a 20 %, de 1 en 1. Las columnas
-que falten se omiten con aviso.
+mezcla 203 (el mejor modelo en Kaggle; los cuantiles bajos no usan BETO). Descuentos de
+0 % a 20 %, de 1 en 1. Las columnas que falten se omiten con aviso.
 
 Salidas:
   views/purchase_rule.csv            cierre y sobrepago por regla y descuento
   views/purchase_rule_segments.csv   lo mismo por tipo y área para la regla recomendada
-  views/purchase_rule_northeast.csv  127 y 152 en el holdout nororiental (cambio de zona)
+  views/purchase_rule_northeast.csv  127 y 203 en el holdout nororiental (cambio de zona)
   views/purchase_rule_frontier.png   frontera entre compras cerradas y sobrepago
 
 Uso:
@@ -37,12 +37,12 @@ errors = importlib.import_module("34_best_model_errors")
 MILLION = 1e6
 DISCOUNTS = np.round(np.arange(0, 0.201, 0.01), 2)
 MARKED_DISCOUNTS = (0.0, 0.05, 0.10, 0.15, 0.20)
-KAGGLE_RULE = "152 (Kaggle, q0,70)"
+KAGGLE_RULE = "203 (Kaggle, q0,70)"
 # Tonos del color del boosting, del cuantil más bajo (claro) al más alto (oscuro).
 QUANTILE_COLORS = {"q0,20": "#E8C866", "q0,30": "#C79A00", "q0,50": "#8F6F00",
                    "q0,70 (127)": "#574300"}
 RULE_LABELS = {"q0,20": "cuantil 0,20", "q0,30": "cuantil 0,30", "q0,50": "cuantil 0,50",
-               "q0,70 (127)": "cuantil 0,70 (127)", KAGGLE_RULE: "mezcla 152 (Kaggle)"}
+               "q0,70 (127)": "cuantil 0,70 (127)", KAGGLE_RULE: "mezcla 203 (Kaggle)"}
 
 
 def candidate_rules(train, oof):
@@ -96,7 +96,7 @@ def rule_table(price, rules, mask=None):
 
 
 def northeast_table(price, oof):
-    """Sensibilidad al cambio de zona: la 127 y la 152 en el holdout nororiental, el vecino
+    """Sensibilidad al cambio de zona: la 127 y la 203 en el holdout nororiental, el vecino
     del test. Ese holdout ajusta solo con precios hasta 1.000 M, así que subpredice los
     caros por construcción: su sobrepago es un piso, no una estimación central."""
     rules = {}
@@ -140,7 +140,7 @@ def plot_frontier(table):
         kx, ky = kaggle["share_closed"] * 100, kaggle[metric] / scale
         ax.plot(kx, ky, "*", color=FAMILY_COLORS["ensemble"], ms=8, markeredgewidth=0,
                 zorder=5)
-        ax.annotate("152 sin\ndescuento", (kx, ky), xytext=(-5, 3), textcoords="offset points",
+        ax.annotate("203 sin\ndescuento", (kx, ky), xytext=(-5, 3), textcoords="offset points",
                     ha="right", va="bottom", fontsize=7, color=plot_style.ANDES["black"])
         ax.set_xlabel("Compras cerradas (% de los anuncios)")
         ax.set_ylabel(ylabel)

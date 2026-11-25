@@ -7,7 +7,7 @@ predicciones, no un modelo nuevo.
 Salidas en views/:
   family_table.csv               mejor especificación por familia, hiperparámetros, búsqueda
                                  y MAE (aleatoria con gemelos, espacial, ponderado, Kaggle)
-  kaggle_progression.png         récord del puntaje público y el cambio que produjo cada salto
+  kaggle_progression.png         puntaje público de los seis pasos hasta el mejor modelo
   common_recipe.csv / .png       cada familia antes y después de la receta común
   family_blend_with_127.csv      correlación con la 127 y ganancia de una mezcla 70/30
   family_blend_with_127.png      correlación del error espacial frente a la ganancia
@@ -97,6 +97,8 @@ FAMILY_ROWS = [
     (148, "neural_net", "Red cuantílica (0,70) por tipo con estrato, terreno y ridge, sin "
      "lat/lon, 5 semillas", None),
     (152, "ensemble", "Mezcla 70 % boosting 127 y 30 % red 148", None),
+    (203, "ensemble", "Mezcla 70 % boosting 198 y 30 % red 196 (las dos con BETO y ridge "
+     "del texto); mejor modelo en Kaggle", None),
 ]
 
 
@@ -162,6 +164,8 @@ def search_text(number, results, public):
                 f"{r(171, 'mae_spatial')} (optimista) y ponderado {r(171, 'mae_weighted')}; su "
                 f"mezcla 172 gana {ps.es_number((results.loc[152, 'mae_spatial'] - results.loc[172, 'mae_spatial']) / M)} M "
                 "de espacial a la 152")
+    if number == 203:
+        return "Pesos fijos; se compararon 70/30 y 60/40 (203 y 204), como en la 152"
     return "Pesos fijos; se compararon 70/30 y 50/50 (152 y 153)"
 
 
@@ -172,7 +176,7 @@ def params_text(number, key, best):
         return "Receta de la 83: " + format_params(boosting_defaults())
     if number == 148:
         return "Por defecto de la red: " + format_params(net_defaults())
-    if number == 152:
+    if number in (152, 203):
         return "Pesos 0,7 y 0,3"
     return "Ninguno"
 
@@ -201,32 +205,28 @@ def family_table(results, kaggle, twins):
 
 # --- Progresión de Kaggle ---
 
-# Cambio que produjo cada récord (verificado en el README, "Puntajes públicos de Kaggle").
-RECORD_CHANGES = {
-    0: "Mediana constante",
-    10: "Boosting con coordenadas",
-    32: "Nivel × 1,15 sobre la 10 (calibración)",
-    53: "Un modelo por tipo, precio en nivel, q0,65, sin OSM",
-    65: "Cuantil 0,70",
-    75: "Texto completo (ridge sobre TF-IDF)",
-    83: "Estrato y valor del terreno, 10 semillas",
-    152: "Mezcla con la red (70 % boosting 127)",
-}
+# Los seis pasos del camino al mejor modelo: un envío por paso, con lo que cambió.
+STEPS = [
+    (0, "Mediana de Bogotá para todo"),
+    (10, "Boosting con el anuncio y coordenadas"),
+    (65, "Por tipo, en pesos, cuantil 0,70"),
+    (83, "Texto completo, estrato y Catastro"),
+    (152, "Mezcla 70/30 con una red neuronal"),
+    (203, "BETO lee el texto junto al ridge"),
+]
 
 
-def records(kaggle):
-    """Envíos que bajaron el mejor puntaje, en orden de número de envío."""
-    ordered = kaggle.sort_values("number")
-    best = ordered["public_mae"].cummin()
-    is_record = ordered["public_mae"].eq(best) & best.ne(best.shift())
-    out = ordered[is_record].copy()
-    missing = set(out["number"]) ^ set(RECORD_CHANGES)
-    assert not missing, f"Los récords no coinciden con los rótulos: {missing}"
+def steps(kaggle):
+    """Puntaje público de cada paso, en el orden del camino."""
+    public = kaggle.set_index("number")
+    rows = [public.loc[n] for n, _ in STEPS]
+    out = pd.DataFrame(rows).reset_index(names="number")
+    out["change"] = [label for _, label in STEPS]
     return out
 
 
 def plot_kaggle_progression(kaggle):
-    data = records(kaggle).reset_index(drop=True)
+    data = steps(kaggle)
     y = np.arange(len(data))[::-1]
     fig, ax = plt.subplots(figsize=ps.FULL)
     for yi, row in zip(y, data.itertuples()):
@@ -234,7 +234,8 @@ def plot_kaggle_progression(kaggle):
         ax.barh(yi, row.public_mae, color=ps.FAMILY_COLORS[family], height=0.62, lw=0)
         ax.text(row.public_mae + 4 * M, yi, ps.es_number(row.public_mae / M), va="center",
                 color=ps.ANDES["black"])
-    labels = [f"{n:02d}  {RECORD_CHANGES[n]}" for n in data["number"]]
+    labels = [f"{k}. {change} ({n:02d})"
+              for k, (n, change) in enumerate(zip(data["number"], data["change"]), start=1)]
     ax.set_yticks(y, labels)
     ax.tick_params(axis="y", length=0)
     ps.millions(ax, "x")

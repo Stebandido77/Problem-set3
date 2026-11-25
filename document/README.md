@@ -1,6 +1,6 @@
 # Presentaciones
 
-- `best_equipo_06`: el mejor modelo (mezcla 152) y si se puede confiar en él para comprar.
+- `best_equipo_06`: el mejor modelo (mezcla 203, primer puesto en Kaggle) y si se puede confiar en él para comprar.
 - `compare_equipo_06`: comparación de familias y de esquemas de validación.
 
 Están hechas en Beamer con la plantilla de la Universidad de los Andes

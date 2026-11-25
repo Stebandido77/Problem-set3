@@ -2,7 +2,7 @@
 predicciones fuera de muestra de la validación espacial (la que imita el salto del resto de
 Bogotá a Chapinero) y no las modifica.
 
-1. Anatomía del error de la mezcla 152 (el mejor puntaje en Kaggle): sesgo, porcentaje
+1. Anatomía del error de la mezcla 203 (el mejor puntaje en Kaggle): sesgo, porcentaje
    sobrepredicho y tamaño medio de la sobre y de la subpredicción, en total y por rango de
    precio, área disponible, estrato, tipo, zona y año. Como referencia del cambio de zona,
    las mismas cifras en el holdout nororiental (sin ponderar).
@@ -39,7 +39,8 @@ from utils import (PROCESSED_DIR, RAW_DIR, TARGET, VIEWS_DIR, load_processed,
                    northeast_holdout, spatial_cv_splits, spatial_groups)
 
 MILLION = 1e6
-BEST = "152_ensemble_w70_30_2"
+BEST = "203_ensemble_w70_30_2"
+BEFORE_BETO = "152_ensemble_w70_30_2"
 BASE_125 = "125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10"
 LOW_QUANTILES = {190: 20, 191: 30, 192: 50}
 # Modelos del ranking: nombre en cv_results -> (etiqueta corta, en la ruta principal).
@@ -54,7 +55,8 @@ RANKED = {
     "127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix":
         ("127 boosting q0,70", True),
     "148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords": ("148 red", True),
-    BEST: ("152 mezcla (Kaggle)", True),
+    BEFORE_BETO: ("152 mezcla sin BETO", True),
+    BEST: ("203 mezcla con BETO", False),
     "186_ensemble_w70_30_2": ("186 mezcla", True),
 }
 COST_RATIOS = (1, 2, 3)
@@ -151,7 +153,7 @@ def segments(train, pred):
 
 
 def anatomy(train, oof):
-    """Anatomía del error de la 152 en la espacial y en el holdout nororiental."""
+    """Anatomía del error de la 203 en la espacial y en el holdout nororiental."""
     y = train[TARGET].to_numpy(float)
     _, test = load_processed()
     _, ne_idx = northeast_holdout(train, test)

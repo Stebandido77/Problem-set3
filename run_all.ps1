@@ -42,6 +42,15 @@ Run 06_ensemble.py --number 186 --how weighted --weights 0.7 0.3 --models `
     181_boosting_pt_core_coords_by_type_pinball_ridge_nocoords_s10_twin_mix `
     148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords
 
+# 3c. Mejor modelo en Kaggle: la 203 (boosting 198 y red 196, con BETO y ridge).
+Run 38_beto_check.py
+Run 04_train_models.py --specs 194 196 --schemes spatial northeast
+Run 20_twin_rules.py --rules mix --numbers 198 `
+    --model 194_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10
+Run 06_ensemble.py --number 203 --how weighted --weights 0.7 0.3 --models `
+    198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix `
+    196_quantile_net_ext_core_coords_by_type_q70_ridge_beto_nocoords
+
 # 4. Cuantiles 0,20, 0,30 y 0,50 para la regla de compra.
 Run 04_train_models.py --specs 190 191 192 --schemes spatial --no-submission
 Run 07_results_table.py
@@ -52,4 +61,5 @@ Run 33_validation_schemes.py
 Run 32_algorithm_comparison.py
 Run 34_best_model_errors.py
 Run 35_purchase_rule.py
+Run 41_beto_figure.py
 Run 36_build_presentations.py
