@@ -3,23 +3,23 @@
 %%  Plantilla Beamer Uniandes (beamerthemeUniandes.sty, sin cambios).
 %%  Compilar con LuaLaTeX:  latexmk -lualatex best_equipo_06.tex
 %%  Las cifras y tablas salen de generated/ (scripts/36_build_presentations.py);
-%%  las figuras, de ../views/ (scripts 32 a 35 y 41). Notas del orador: notas_best.md.
+%%  las figuras, de ../views/ (scripts 31 a 35 y 41). Notas del orador: notas_best.md.
 %% ============================================================
 \documentclass[aspectratio=169,11pt]{beamer}
 \input{preamble}
-\usetikzlibrary{arrows.meta,positioning}
+\usetikzlibrary{arrows.meta,positioning,calc}
 \graphicspath{{../views/}}
 \input{generated/cifras}
 
 \title[El mejor modelo y la decisión de compra]{¿Podemos confiar en el modelo para comprar vivienda en Chapinero?}
 \subtitle{El mejor modelo y la decisión de compra}
-\author[Equipo 06]{[NOMBRES]}
+\author[Equipo 06]{\Authors\\ Equipo 06}
 \institute{Big Data y Machine Learning (MECA 4107)\\ Universidad de los Andes}
 \date[Nov.\ 2026]{Bogotá, noviembre de 2026}
 
 \newcommand{\twolines}[2]{\begin{tabular}[t]{@{}c@{}}#1\\#2\end{tabular}}
 % Figura a casi todo el ancho y, debajo, las viñetas que dicen qué mirar en ella.
-\newcommand{\figslide}[1]{\centering\includegraphics[width=0.88\textwidth]{#1}\par\vspace{2pt}}
+\newcommand{\figslide}[2][0.86]{\centering\includegraphics[width=#1\textwidth]{#2}\par\vspace{2pt}}
 \newenvironment{lookat}{\begin{itemize}\small\setlength{\itemsep}{1pt}}{\end{itemize}}
 
 \begin{document}
@@ -40,195 +40,198 @@
   \vfill
   \begin{itemize}\small
     \item MAE: error promedio en pesos entre el precio predicho y el observado.
-    \item Del tablero público al privado, el MAE sube \PrivateRise\ M (\PrivateRisePct): el modelo se sostuvo.
-    \item En el privado, el segundo equipo queda en \KagSecond\ M.
-    \item Validación espacial (zonas que no vio al entrenar): \SpatialBest\ M, optimista frente a Kaggle.
+    \item Del público al privado el MAE sube \PrivateRise\ M (\PrivateRisePct) y el puesto se mantiene.
+    \item Validación espacial (zonas que el modelo no vio): \SpatialBest\ M, por debajo de los dos tableros.
+    \item Los precios son de oferta: lo que pide el vendedor.
   \end{itemize}
   \vfill
 \end{frame}
 
 % 2 ---------------------------------------------------------------
-\begin{frame}{Dos lectores del texto alimentan un boosting y una red}
-  \centering
-  \begin{tikzpicture}[
-      font=\scriptsize, align=center, line width=0.4pt,
-      box/.style={draw=andesmid, rounded corners=2pt, inner sep=3pt,
-                  minimum height=0.8cm, text width=2.85cm},
-      head/.style={font=\scriptsize\bfseries, text=andesgray},
-      flow/.style={-{Stealth[length=4pt,width=3pt]}, draw=andesgray, line width=0.5pt}]
-    % Columna 1: qué ve el modelo
-    \node[box] (struct) at (0, 1.3)  {\textbf{El inmueble}\\tipo, alcobas,\\baños y área};
-    \node[box] (place)  at (0, 0.05) {\textbf{La ubicación}\\estrato, terreno\\y distancias};
-    \node[box] (text)   at (0,-1.25) {\textbf{El texto del anuncio}\\título y descripción};
-    % Columna 2: los dos lectores del texto
-    \node[box, draw=andesgray, line width=0.7pt] (ridge) at (3.55,-0.65)
-         {\textbf{Ridge sobre TF-IDF}\\un peso por palabra};
-    \node[box, draw=andesblack, line width=0.7pt] (beto) at (3.55,-1.75)
-         {\textbf{BETO}\\lenguaje en español};
-    % Columna 3: los dos modelos
-    \node[box, draw=andesaccent, line width=0.8pt] (boost) at (7.2, 0.55)
-         {\textbf{Boosting}\\por tipo de inmueble\\peso 70\,\%};
-    \node[box, draw=andesred, line width=0.8pt] (net) at (7.2,-0.95)
-         {\textbf{Red neuronal}\\por tipo de inmueble\\peso 30\,\%};
-    % Columna 4: la mezcla
-    \node[box, draw=andesblack, line width=0.8pt] (pred) at (10.75,-0.2)
-         {\textbf{Mezcla 70/30}\\promedio ponderado\\$\rightarrow$ precio de oferta};
-    % Encabezados alineados
-    \node[head] at (0, 2.3)    {Qué ve el modelo};
-    \node[head] at (3.55, 2.3) {Lectores del texto};
-    \node[head] at (7.2, 2.3)  {Dos modelos};
-    \node[head] at (10.75, 2.3) {La predicción};
-    % Flechas
-    \draw[flow] (text.east) -- ++(0.2,0) |- (ridge.west);
-    \draw[flow] (text.east) -- ++(0.2,0) |- (beto.west);
-    \coordinate (bus) at (5.4, 0);
-    \draw[draw=andesgray, line width=0.5pt] (struct.east) -| (bus);
-    \draw[draw=andesgray, line width=0.5pt] (place.east) -- (bus);
-    \draw[draw=andesgray, line width=0.5pt] (ridge.east) -| (bus);
-    \draw[draw=andesgray, line width=0.5pt] (beto.east) -| (bus);
-    \draw[flow] (bus) |- (boost.west);
-    \draw[flow] (bus) |- (net.west);
-    \draw[flow] (boost.east) -- ++(0.25,0) |- (pred.west);
-    \draw[flow] (net.east) -- ++(0.25,0) |- (pred.west);
-  \end{tikzpicture}
-  \par\vspace{-0.15cm}
-  \begin{itemize}\small\setlength{\itemsep}{0pt}
-    \item Ridge sobre TF-IDF: regresión que le pone un peso a cada palabra del anuncio.
-    \item BETO: modelo de lenguaje en español, afinado aquí para estimar el precio desde el texto.
-    \item Boosting: muchos árboles de decisión pequeños; cada uno corrige el error del anterior.
-    \item Red neuronal: modelo que puede predecir por encima de los precios que vio.
+\begin{frame}{Chapinero casi no tiene casas y su terreno vale \LandRatio\ veces más}
+  \begin{columns}[c]
+    \column{0.37\textwidth}
+      \centering\includegraphics[width=\linewidth]{map_train_test}
+    \column{0.61\textwidth}
+      \centering\footnotesize
+      \input{generated/tabla_chapinero}
+  \end{columns}
+  \begin{itemize}\small\setlength{\itemsep}{1pt}
+    \item El test no trae precios: el terreno sirve de referencia de su nivel.
+    \item Sin área en el anuncio: \NAreaMissTest\ anuncios del test (\AreaMissTest).
+    \item Con el texto y anuncios del mismo punto, faltan \NAreaMissTestPt\ (\AreaMissTestPt).
   \end{itemize}
 \end{frame}
 
 % 3 ---------------------------------------------------------------
-\begin{frame}{En seis pasos, el MAE público baja \GainNaive\ frente al ingenuo}
-  \figslide{kaggle_progression}
-  \begin{lookat}
-    \item Cada barra es el MAE del tablero público en un paso; menos es mejor.
-    \item Los tres primeros pasos bajan \GainFirst\ M; los tres últimos, \GainLast\ M más.
-    \item Cada uno de los pasos 4 a 6 supera los 2 M que tratamos como ruido.
-  \end{lookat}
+\begin{frame}{El modelo usa seis predictores externos y veinte del texto}
+  \centering\scriptsize
+  \input{generated/tabla_predictores}
+  \par\vspace{4pt}
+  \begin{itemize}\small\setlength{\itemsep}{1pt}
+    \item Ridge sobre TF-IDF: regresión que le pone un peso a cada palabra del anuncio.
+    \item BETO: modelo de lenguaje en español, afinado aquí para estimar el precio desde el texto.
+    \item Los dos lectores del texto se ajustan sin ver el precio del anuncio que predicen.
+  \end{itemize}
 \end{frame}
 
 % 4 ---------------------------------------------------------------
-\begin{frame}{Pasos 1 a 3: un boosting y corregir el nivel bajan \GainFirst\ M}
-  \vfill
-  \centering\scriptsize
-  \input{generated/tabla_pasos_a}
-  \par\vspace{2pt}{\scriptsize\color{andesgray} MAE del tablero público en millones de pesos; ganancia frente al paso anterior.}
-  \vfill
-  \begin{itemize}\small
-    \item El primer boosting ya deja el error en menos de la mitad del ingenuo.
-    \item Subir a mano el envío 10 un 15\,\% dio \KagScaled\ M: calibración con el tablero, no modelo.
-    \item Cuantil 0,70: apuntar a un precio que el 70\,\% de los inmuebles parecidos no supera.
-    \item Lo escogimos con el tablero: el 0,65 dio \KagQsixtyfive\ M, diferencia dentro del ruido.
+\begin{frame}{Un boosting y una red leen el inmueble, la zona y el texto}
+  \centering
+  \begin{tikzpicture}[
+      font=\scriptsize, align=center, line width=0.4pt,
+      box/.style={draw=andesmid, rounded corners=2pt, inner sep=3pt,
+                  minimum height=0.85cm, text width=2.85cm},
+      head/.style={font=\scriptsize\bfseries, text=andesgray},
+      link/.style={draw=andesgray, line width=0.5pt},
+      flow/.style={-{Stealth[length=4pt,width=3pt]}, draw=andesgray, line width=0.5pt}]
+    % Columna 1: qué ve el modelo
+    \node[box] (struct) at (0, 1.45)  {\textbf{El inmueble}\\tipo, alcobas,\\baños y área};
+    \node[box] (place)  at (0, 0.2)   {\textbf{La ubicación}\\estrato, terreno\\y 4 hitos};
+    \node[box] (text)   at (0,-1.2)   {\textbf{El texto del anuncio}\\título y descripción};
+    % Columna 2: los dos lectores del texto
+    \node[box, draw=andesgray, line width=0.7pt] (ridge) at (3.55,-0.6)
+         {\textbf{Ridge sobre TF-IDF}\\precio según las palabras};
+    \node[box, draw=andesblack, line width=0.7pt] (beto) at (3.55,-1.8)
+         {\textbf{BETO}\\precio según el texto};
+    % Columna 3: los dos modelos
+    \node[box, draw=andesaccent, line width=0.8pt] (boost) at (7.25, 0.75)
+         {\textbf{Boosting}\\árboles que corrigen\\al anterior};
+    \node[box, draw=andesred, line width=0.8pt] (net) at (7.25,-1.05)
+         {\textbf{Red neuronal}\\predice también sobre\\los precios vistos};
+    % Columna 4: la mezcla
+    \node[box, draw=andesblack, line width=0.8pt] (pred) at (10.85,-0.15)
+         {\textbf{Mezcla 70/30}\\boosting y red\\$\rightarrow$ precio de oferta};
+    % Encabezados alineados
+    \node[head] at (0, 2.35)     {Qué ve el modelo};
+    \node[head] at (3.55, 2.35)  {Lectores del texto};
+    \node[head] at (7.25, 2.35)  {Dos modelos, cuantil 0,70};
+    \node[head] at (10.85, 2.35) {La predicción};
+    % Del texto a sus dos lectores: una derivación a la derecha de la caja del texto
+    \coordinate (tsplit) at ($(text.east)+(0.3,0)$);
+    \draw[link] (text.east) -- (tsplit);
+    \draw[flow] (tsplit) |- (ridge.west);
+    \draw[flow] (tsplit) |- (beto.west);
+    % Bus vertical que junta las cuatro entradas, entre los lectores y los modelos
+    \def\busx{5.45}
+    \draw[link] (\busx, 1.45) -- (\busx,-1.8);
+    \draw[link] (struct.east) -- (\busx, 1.45);
+    \draw[link] (place.east) -- (\busx, 0.2);
+    \draw[link] (ridge.east) -- (\busx,-0.6);
+    \draw[link] (beto.east) -- (\busx,-1.8);
+    \draw[flow] (\busx, 0.75) -- (boost.west);
+    \draw[flow] (\busx,-1.05) -- (net.west);
+    % De los modelos a la mezcla
+    \coordinate (mjoin) at ($(boost.east)!0.5!(net.east)+(0.3,0)$);
+    \draw[link] (boost.east) -| (mjoin);
+    \draw[link] (net.east) -| (mjoin);
+    \draw[flow] (mjoin) |- (pred.west);
+  \end{tikzpicture}
+  \par\vspace{2pt}
+  \begin{itemize}\small\setlength{\itemsep}{0pt}
+    \item Los dos modelos apuntan al cuantil 0,70: un precio que el 70\,\% de los parecidos no supera.
+    \item Cada modelo se entrena aparte para apartamentos y para casas.
+    \item El boosting promedia 10 semillas y la red, 5; la predicción final las pondera 70/30.
   \end{itemize}
-  \vfill
 \end{frame}
 
 % 5 ---------------------------------------------------------------
-\begin{frame}{Pasos 4 a 6: el texto, la red y BETO bajan \GainLast\ M más}
-  \vfill
+\begin{frame}{En seis pasos el MAE público baja de \KagStepA\ a \KagStepF\ M}
   \centering\scriptsize
-  \input{generated/tabla_pasos_b}
-  \par\vspace{2pt}{\scriptsize\color{andesgray} MAE del tablero público en millones de pesos; ganancia frente al paso anterior.}
+  \input{generated/tabla_pasos}
+  \par\vspace{2pt}{\scriptsize\color{andesgray} MAE del tablero público en millones de pesos; ganancia frente al paso anterior. Hitos: Zona T, Parque 93, Centro Internacional y Plaza de Bolívar.}
   \vfill
-  \begin{itemize}\small
-    \item Paso 4: el ridge del texto solo aporta \GainText\ de los \GainStepD\ M (envío 75).
-    \item Paso 5: la red se equivoca en otros inmuebles y pasa el tope de 1.650 M.
-    \item Paso 6: BETO mejora al boosting y a la red; la mezcla baja \GainStepF\ M.
-    \item Las ganancias de los pasos 5 y 6 son pequeñas, pero superan el ruido de 2 M.
+  \begin{itemize}\small\setlength{\itemsep}{1pt}
+    \item Los pasos 2 y 3 explican \GainFirst\ de los \GainTotal\ M de mejora.
+    \item Subir a mano un 15\,\% el primer boosting dio \KagScaled\ M: es una calibración con el tablero.
+    \item El cuantil 0,70 se escogió con el tablero; el 0,65 dio \KagQsixtyfive\ M, dentro del ruido.
+    \item Diferencias menores de 2 M en el tablero son ruido; el paso 6 gana \GainStepF\ M.
   \end{itemize}
   \vfill
 \end{frame}
 
 % 6 ---------------------------------------------------------------
-\begin{frame}{BETO acierta en los precios extremos; el ridge, en los del medio}
-  \figslide{beto_deciles}
+\begin{frame}{BETO acierta en los precios extremos y el ridge en los del medio}
+  \figslide[0.8]{beto_deciles}
   \begin{lookat}
-    \item Solos, fuera de muestra: BETO se equivoca \MaeBeto\ M y el ridge \MaeRidge\ M.
-    \item Izquierda: el ridge gana en los deciles 4 a 8; BETO, en los demás.
-    \item Derecha: el ridge encoge más hacia la media; por eso conviene usar los dos.
+    \item Solos y fuera de muestra, BETO se equivoca \MaeBeto\ M y el ridge \MaeRidge\ M.
+    \item Izquierda: el ridge gana en los deciles 4 a 8; BETO, en los extremos.
+    \item Con los dos lectores, el boosting baja de \SpatialBoostingBefore\ a \SpatialBoostingAfter\ M en la espacial.
   \end{lookat}
 \end{frame}
 
 % 7 ---------------------------------------------------------------
+\begin{frame}{El texto del anuncio es el predictor con más peso en el boosting}
+  \figslide[0.8]{best_errors_importance}
+  \begin{lookat}
+    \item Boosting sin BETO, misma receta e hiperparámetros que el del mejor modelo.
+    \item Texto (\ImpText): resume calidad y amenidades; área (\ImpArea); largo de la descripción (\ImpDesc).
+    \item \HypLeaves\ hojas, profundidad \HypDepth, tasa \HypRate\ y \HypTrees\ árboles; sintonizar no mejoró.
+  \end{lookat}
+\end{frame}
+
+% 8 ---------------------------------------------------------------
 \begin{frame}{Cinco ideas razonables empeoraron la validación}
   \vfill
-  \centering\footnotesize
+  \centering\scriptsize
   \input{generated/tabla_negativos}
-  \par\vspace{2pt}{\scriptsize\color{andesgray} Cambio de MAE frente a la referencia de cada idea, en millones; positivo es peor.}
+  \par\vspace{2pt}{\scriptsize\color{andesgray} Cambio de MAE frente a la referencia de cada idea, en millones; positivo es peor.\\ Holdout ponderado: anuncios de entrenamiento vecinos a Chapinero, ponderados para parecerse al test.}
   \vfill
-  \begin{itemize}\small
-    \item Ponderado: holdout al lado de Chapinero, con los pesos del test.
-    \item De las \NNegative\ variantes registradas, ninguna mejoró la espacial y el ponderado a la vez.
-    \item Con el bosque, el ponderado cambia \BlendForestGain\ M: la mezcla no aporta.
+  \begin{itemize}\small\setlength{\itemsep}{1pt}
+    \item Ninguna de las \NNegative\ variantes probadas mejoró la espacial y el ponderado a la vez.
+    \item En el test, las distancias de OSM varían \OsmIqrMin\ a \OsmIqrMax\ veces lo de entrenamiento.
+    \item Con el bosque, el holdout ponderado cambia \BlendForestGain\ M.
   \end{itemize}
   \vfill
 \end{frame}
 
-% 8 ---------------------------------------------------------------
-\begin{frame}{El modelo sobrepredice los baratos y subpredice los caros}
-  \figslide{best_errors_segments}
-  \begin{lookat}
-    \item Validación espacial: sobrepredice el \ShareOverTotal\ de los inmuebles, con sesgo de +\BiasTotal\ M.
-    \item Precio pedido: sobrepredice el \ShareOverCheap\ bajo 400 M y el \ShareOverRich\ sobre 1.200 M.
-    \item Casas: MAE de \MaeHouse\ M, frente a \MaeApt\ M en apartamentos.
-  \end{lookat}
-\end{frame}
-
 % 9 ---------------------------------------------------------------
-\begin{frame}{Si sobrepagar cuesta el triple, la mezcla cae al puesto \BestRankKthree}
-  \figslide{asymmetric_ranking}
+\begin{frame}{El cuantil 0,70 sobrepredice dos de cada tres inmuebles}
+  \figslide[0.76]{best_errors_segments}
   \begin{lookat}
-    \item k: cuántas veces cuesta sobrepredecir frente a subpredecir; k = 1 es el MAE.
-    \item Con k = 3 gana el boosting sin BETO en cuantil 0,20 (\AsymWinnerCost\ frente a \BestCostKthree\ M).
-    \item Teoría: con costo k veces mayor, conviene apuntar al cuantil 1/(1+k).
+    \item Validación espacial: sobrepredice el \ShareOverTotal, con sesgo de +\BiasTotal\ M.
+    \item Por precio pedido el patrón es en parte mecánico: toda predicción se acerca a la media.
+    \item Por precio predicho, el sesgo es positivo en cada rango, de +\BiasPredMin\ a +\BiasPredMax\ M.
   \end{lookat}
 \end{frame}
 
 % 10 --------------------------------------------------------------
-\begin{frame}{Ofrecer la predicción compra lo que el modelo sobreestima}
-  \figslide{purchase_rule_frontier}
+\begin{frame}{Si sobrepagar cuesta el triple, la mezcla cae al puesto \BestRankKthree}
+  \figslide[0.84]{asymmetric_ranking}
   \begin{lookat}
-    \item Regla: ofrecer la predicción con descuento y comprar si alcanza el precio pedido.
-    \item La 203 sin descuento compra el \OverClosed\ y sobrepaga el \OverCapital\ del capital.
-    \item A igual número de compras, bajar el cuantil sobrepaga menos que descontar.
+    \item k: veces que cuesta sobrepredecir frente a subpredecir; k = 1 es el MAE.
+    \item Con k = 1 el cuantil 0,50 tiene menos error (\SpatialQfifty\ M): la espacial premia bajar el nivel.
+    \item En Kaggle el 0,70 dio \KagStepC\ M y el 0,65 \KagQsixtyfive\ M: Chapinero es más caro.
   \end{lookat}
 \end{frame}
 
 % 11 --------------------------------------------------------------
-\begin{frame}{Con el cuantil 0,20, los apartamentos sobrepagan menos}
-  \vfill
-  \centering\footnotesize
-  \input{generated/tabla_regla}
-  \par\vspace{2pt}{\scriptsize\color{andesgray} Validación espacial, sin descuento; sobrepago medio por compra en millones, frente al precio pedido. El cuantil 0,20 es el boosting sin BETO.}
-  \vfill
-  \begin{itemize}\small
-    \item Cuantil 0,20: compra el \LowClosed\ de los anuncios y sobrepaga el \LowCapital\ del capital.
-    \item Apartamentos: \AptCapital\ del capital; casas: \HouseCapital.
-    \item Cifras algo optimistas: la regla se escogió con estas mismas predicciones.
-  \end{itemize}
-  \vfill
+\begin{frame}{Ofrecer la predicción compra lo que el modelo sobreestima}
+  \figslide{purchase_rule_frontier}
+  \begin{lookat}
+    \item Regla simulada: ofrecer la predicción con descuento y comprar si alcanza el precio pedido.
+    \item Con la mezcla sin descuento se cierra el \OverClosed\ y la empresa sobrepaga el \OverCapital.
+    \item A igual número de compras, bajar el cuantil sobrepaga menos que descontar.
+  \end{lookat}
 \end{frame}
 
 % 12 --------------------------------------------------------------
-\begin{frame}{Sirve para escoger candidatos, no para fijar el precio}
-  \begin{itemize}
-    \item Ofrecer el cuantil 0,20, solo en apartamentos, y cerrar tras una tasación física.
-    \item No usarlo en casas ni con predicciones de más de 900 M.
-    \item Riesgo: son precios de oferta (lo que pide el vendedor), no de cierre.
-    \item Riesgo: datos de 2019 a 2021 y nivel incierto en Chapinero.
-  \end{itemize}
-  \vfill
+\begin{frame}{Sí se puede usar para comprar, con una oferta conservadora y un avalúo}
   \begin{columns}[T]
-    \column{0.45\textwidth}\centering \keyfig{\AptClosed}{\twolines{de los apartamentos se compran}{con el cuantil 0,20}}
-    \column{0.45\textwidth}\centering \keyfig{\AptCapital}{\twolines{de sobrepago sobre el capital, frente a}{\OverCapital\ ofreciendo la predicción}}
+    \column{0.32\textwidth}\centering \keyfig{\AptClosed}{\twolines{de las ofertas se cierran}{(apartamentos)}}
+    \column{0.32\textwidth}\centering \keyfig{\AptCapital}{\twolines{sobrepago de la empresa}{sobre el capital}}
+    \column{0.32\textwidth}\centering \keyfig{\AptKaggleCapital}{\twolines{al ofertar la predicción de}{Kaggle (cuantil 0,70)}}
   \end{columns}
   \vfill
-  \takeaway{El modelo filtra candidatos; la tasación decide el precio.}
+  \begin{itemize}\small\setlength{\itemsep}{1pt}
+    \item Ofertar el cuantil 0,20: un precio que el 80\,\% de los inmuebles parecidos supera.
+    \item En casas la empresa sobrepaga el \HouseCapital; en ofertas desde 900 M, el \AptHighCapital.
+    \item Por eso, solo apartamentos con oferta bajo 900 M, y un avalúo fija el precio.
+    \item Regla simulada en zonas de Bogotá que el modelo no vio, con el boosting sin BETO.
+  \end{itemize}
+  \vfill
 \end{frame}
 
-\andesclosing{¡Gracias!}{Equipo 06 · MECA 4107}
+\andesclosing{¡Gracias!}{\Authors\ · Equipo 06 · MECA 4107}
 
 \end{document}
