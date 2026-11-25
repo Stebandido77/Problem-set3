@@ -38,6 +38,7 @@ MILLION = 1e6
 DISCOUNTS = np.round(np.arange(0, 0.201, 0.01), 2)
 MARKED_DISCOUNTS = (0.0, 0.05, 0.10, 0.15, 0.20)
 KAGGLE_RULE = "203 (Kaggle, q0,70)"
+HIGH_PREDICTION = 900e6  # límite de la recomendación: ofertas desde 900 M
 # Tonos del color del boosting, del cuantil más bajo (claro) al más alto (oscuro).
 QUANTILE_COLORS = {"q0,20": "#E8C866", "q0,30": "#C79A00", "q0,50": "#8F6F00",
                    "q0,70 (127)": "#574300"}
@@ -108,15 +109,19 @@ def northeast_table(price, oof):
 
 
 def segment_table(train, price, pred, label, discount):
-    """La regla recomendada por tipo y por disponibilidad del área efectiva."""
+    """La regla recomendada por tipo, por disponibilidad del área efectiva y, en
+    apartamentos, por la predicción de la propia regla (por debajo o por encima de 900 M)."""
     kind = np.where(train["is_house"] == 1, "casa", "apartamento")
     area = np.where(train["surface_pt"].isna(), "sin área", "con área")
+    high = pred * (1 - discount) >= HIGH_PREDICTION
     rows = []
     for segment, mask in [("todas", np.ones(len(price), bool)),
                           *[(k, kind == k) for k in ("apartamento", "casa")],
                           *[(a, area == a) for a in ("con área", "sin área")],
                           *[(f"{k}, {a}", (kind == k) & (area == a))
-                            for k in ("apartamento", "casa") for a in ("con área", "sin área")]]:
+                            for k in ("apartamento", "casa") for a in ("con área", "sin área")],
+                          ("apartamento, oferta < 900 M", (kind == "apartamento") & ~high),
+                          ("apartamento, oferta >= 900 M", (kind == "apartamento") & high)]:
         rows.append({"rule": label, "discount": discount, "segment": segment,
                      **simulate(price[mask], pred[mask], discount)})
     return pd.DataFrame(rows)
@@ -141,7 +146,7 @@ def plot_frontier(table):
         ax.plot(kx, ky, "*", color=FAMILY_COLORS["ensemble"], ms=8, markeredgewidth=0,
                 zorder=5)
         ax.annotate("203 sin\ndescuento", (kx, ky), xytext=(-5, 3), textcoords="offset points",
-                    ha="right", va="bottom", fontsize=7, color=plot_style.ANDES["black"])
+                    ha="right", va="bottom", fontsize=plot_style.LABEL_SIZE, color=plot_style.ANDES["black"])
         ax.set_xlabel("Compras cerradas (% de los anuncios)")
         ax.set_ylabel(ylabel)
         ax.set_xlim(0, (table["share_closed"] * 100).max() * 1.05)

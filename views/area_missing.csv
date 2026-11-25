@@ -1,0 +1,7 @@
+base,area_desde,n,n_sin_area,porcentaje
+entrenamiento,anuncio,38644,15075,0.3900993685953835
+entrenamiento,anuncio y texto,38644,14706,0.38055066763275025
+entrenamiento,"anuncio, texto y mismo punto",38644,9929,0.25693509988614016
+test,anuncio,10286,3710,0.36068442543262685
+test,anuncio y texto,10286,3650,0.35485125413182966
+test,"anuncio, texto y mismo punto",10286,2029,0.1972584094886253

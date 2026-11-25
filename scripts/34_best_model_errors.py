@@ -62,15 +62,15 @@ RANKED = {
 COST_RATIOS = (1, 2, 3)
 PRICE_BINS = [0, 400, 500, 700, 900, 1200, np.inf]
 PRICE_LABELS = ["<400", "400-500", "500-700", "700-900", "900-1.200", "1.200+"]
-SEGMENT_TITLES = {"precio_observado": "Precio pedido (M)",
-                  "precio_predicho": "Precio predicho (M)", "area": "Área del inmueble",
+SEGMENT_TITLES = {"precio_observado": "Precio pedido (M, desde)",
+                  "precio_predicho": "Precio predicho (M, desde)", "area": "Área tomada de",
                   "estrato": "Estrato", "tipo": "Tipo", "zona": "Zona espacial",
                   "año": "Año del anuncio"}
-# Etiquetas cortas del eje en la figura de segmentos (los valores del CSV no cambian).
-SEGMENT_TICKS = {"400-500": "400–\n500", "500-700": "500–\n700", "700-900": "700–\n900",
-                 "900-1.200": "900–\n1.200", "anuncio o texto": "anuncio\no texto",
-                 "mismo punto": "mismo\npunto", "apartamento": "aparta-\nmento",
-                 "sin dato": "sin\ndato"}
+# Etiquetas del eje en una línea: los rangos de precio se rotulan por su límite inferior (el
+# título del panel lo dice); los valores del CSV no cambian.
+SEGMENT_TICKS = {"400-500": "400", "500-700": "500", "700-900": "700", "900-1.200": "900",
+                 "anuncio o texto": "anuncio", "faltante": "sin área",
+                 "sin dato": "s. d."}
 OVER_COLOR, UNDER_COLOR = plot_style.OVER_COLOR, plot_style.UNDER_COLOR
 TOP_FEATURES = 12
 FEATURE_LABELS = {
@@ -183,9 +183,12 @@ def segment_order(variable, values):
 def plot_anatomy(table):
     """Sobre y subpredicción media por segmento, con el sesgo y el % sobrepredicho."""
     spatial = table[table["scheme"] == "spatial"]
-    panels = ["precio_observado", "precio_predicho", "area", "tipo", "estrato", "zona"]
-    fig, axes = plt.subplots(2, 3, figsize=plot_style.FULL, sharey=True)
-    for ax, variable in zip(axes.flat, panels):
+    # Los precios van arriba, a medio ancho cada uno, para que sus seis rangos quepan en una
+    # línea; abajo, área, tipo y estrato. La zona espacial queda en el CSV.
+    fig, axd = plt.subplot_mosaic([["precio_observado"] * 6 + ["precio_predicho"] * 6,
+                                   ["area"] * 5 + ["tipo"] * 3 + ["estrato"] * 4],
+                                  figsize=plot_style.FULL_TALL, sharey=True)
+    for variable, ax in axd.items():
         part = spatial[spatial["variable"] == variable].set_index("segment")
         part = part.loc[segment_order(variable, part.index)]
         x = np.arange(len(part))
@@ -197,16 +200,16 @@ def plot_anatomy(table):
                 markeredgewidth=0, label="Sesgo medio")
         ax.axhline(0, color=plot_style.ANDES["gray"], lw=0.6)
         labels = [SEGMENT_TICKS.get(s, s) for s in part.index]
-        ax.set_xticks(x, labels, fontsize=7)
+        ax.set_xticks(x, labels, fontsize=plot_style.LABEL_SIZE)
         ax.tick_params(axis="x", length=0)
         ax.grid(axis="x", visible=False)
         ax.set_title(SEGMENT_TITLES[variable])
         ax.set_xlim(-0.6, len(x) - 0.4)
         ax.yaxis.set_major_locator(MultipleLocator(200))
         ax.yaxis.set_major_formatter(plot_style.es_formatter())
-    for ax in axes[:, 0]:
-        ax.set_ylabel("Error medio (M)")
-    handles, labels = axes[0, 0].get_legend_handles_labels()
+    for variable in ("precio_observado", "area"):
+        axd[variable].set_ylabel("Error medio (M)")
+    handles, labels = axd["precio_observado"].get_legend_handles_labels()
     order = [1, 2, 0]
     fig.legend([handles[i] for i in order], [labels[i] for i in order],
                loc="outside lower center", ncol=3)
@@ -248,10 +251,10 @@ def plot_importance(table):
         share = part["gain_share"].to_numpy() * 100
         ax.barh(labels, share, color=FAMILY_COLORS["boosting"], height=0.7)
         ax.text(share[-1] + 0.4, len(share) - 1, f"{es_number(share[-1], 0)} %",
-                va="center", fontsize=7, color=plot_style.ANDES["black"])
+                va="center", fontsize=plot_style.LABEL_SIZE, color=plot_style.ANDES["black"])
         ax.set_title("Apartamentos" if kind == "apartamento" else "Casas")
         ax.set_xlabel("Ganancia (% del total)")
-        ax.tick_params(axis="y", length=0, labelsize=7)
+        ax.tick_params(axis="y", length=0, labelsize=plot_style.LABEL_SIZE)
         ax.grid(axis="y", visible=False)
         ax.set_ylim(-0.6, len(share) - 0.4)
         ax.xaxis.set_major_formatter(plot_style.es_formatter())
@@ -311,12 +314,12 @@ def plot_ranking(table):
         ax.barh(y, cost, color=[FAMILY_COLORS[f] for f in part["family"]], height=0.7)
         for i in (cost.idxmin(), part.index[part["model"] == BEST][0]):
             ax.text(cost[i] + cost.max() * 0.02, i, es_number(cost[i], 0), va="center",
-                    fontsize=7, color=plot_style.ANDES["black"])
+                    fontsize=plot_style.LABEL_SIZE, color=plot_style.ANDES["black"])
         ax.set_title("k = 1 (MAE)" if k == 1 else f"k = {k}")
         ax.set_xlim(0, cost.max() * 1.15)
         ax.xaxis.set_major_formatter(plot_style.es_formatter())
         ax.grid(axis="y", visible=False)
-        ax.tick_params(axis="y", length=0, labelsize=7)
+        ax.tick_params(axis="y", length=0, labelsize=plot_style.LABEL_SIZE)
     axes[1].set_xlabel("Costo medio por inmueble (millones de pesos)")
     axes[0].set_yticks(y, part["label"])
     axes[0].set_ylim(-0.6, len(part) - 0.4)

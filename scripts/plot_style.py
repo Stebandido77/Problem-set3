@@ -38,6 +38,9 @@ ANDES = {
     "red": "#B3261E",
 }
 GRID = "#E3E3E3"
+# Tamaño de las anotaciones dentro de las figuras (valores y rótulos directos), en puntos:
+# legible con la figura proyectada a 0,88 del ancho de la diapositiva.
+LABEL_SIZE = 8.5
 
 # Un color por familia en todas las figuras. La mezcla, el boosting y la red usan los colores
 # de la plantilla (negro, amarillo oscuro y rojo); las demás familias toman tonos que pasan
@@ -99,15 +102,15 @@ def _template_font():
 
 
 def setup():
-    """Parámetros de matplotlib comunes a todas las figuras (texto de 8 pt a tamaño real)."""
+    """Parámetros de matplotlib comunes a todas las figuras (texto de 9 a 10 pt a tamaño real)."""
     family = _template_font()
     plt.rcParams.update({
         "font.family": "sans-serif",
         "font.sans-serif": [f for f in (family, "Arial", "DejaVu Sans") if f],
-        "font.size": 8,
-        "axes.titlesize": 8.5,
+        "font.size": 9.5,
+        "axes.titlesize": 10,
         "axes.titleweight": "semibold",
-        "axes.labelsize": 8,
+        "axes.labelsize": 9.5,
         "axes.labelcolor": ANDES["gray"],
         "axes.edgecolor": ANDES["mid"],
         "axes.linewidth": 0.6,
@@ -118,15 +121,15 @@ def setup():
         "grid.color": GRID,
         "grid.linewidth": 0.5,
         "grid.linestyle": "-",
-        "xtick.labelsize": 7.5,
-        "ytick.labelsize": 7.5,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
         "xtick.color": ANDES["gray"],
         "ytick.color": ANDES["gray"],
         "xtick.major.size": 2.5,
         "ytick.major.size": 2.5,
         "xtick.major.width": 0.6,
         "ytick.major.width": 0.6,
-        "legend.fontsize": 7.5,
+        "legend.fontsize": 9,
         "legend.frameon": False,
         "lines.linewidth": 1.4,
         "lines.markersize": 4.5,

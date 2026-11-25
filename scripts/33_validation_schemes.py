@@ -18,6 +18,7 @@ archivo enviado y completa lo que falta así:
 Salidas en views/:
   validation_schemes.csv        un envío por fila con todos los esquemas
   validation_rank_corr.csv      Spearman, pares bien ordenados y brecha por esquema
+  scheme_best_model.csv         el modelo que escoge cada esquema
   validation_vs_kaggle.png      cada esquema contra Kaggle (2 × 2)
   validation_vs_kaggle_wide.png la misma figura en una fila, para diapositiva 16:9
   validation_rank_corr.png      Spearman por esquema
@@ -44,11 +45,13 @@ from utils import (ID_COL, PROCESSED_DIR, TARGET, VIEWS_DIR, find_submission,
 MILLION = 1e6
 SCHEMES = {
     "mae_random": "Aleatoria simple",
-    "mae_random_twins": "Aleatoria con gemelos",
+    "mae_random_twins": "Aleatoria, repetidos juntos",
     "mae_spatial": "Espacial (10 zonas)",
-    "mae_weighted": "Nororiental ponderado",
+    "mae_weighted": "Holdout ponderado",
 }
-REFERENCE = {"mae_northeast": "Nororiental sin ponderar"}
+REFERENCE = {"mae_northeast": "Holdout sin ponderar"}
+# Conjunto con el que se comparan los esquemas: los mismos envíos en los cuatro.
+COMMON = "comunes a los cuatro, sin el ingenuo"
 BASE_125 = "125_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10"
 NAME_127 = "127_boosting_pt_core_coords_by_type_level_q70_ridge_nocoords_s10_twin_mix"
 NAME_148 = "148_quantile_net_ext_core_coords_by_type_q70_ridge_nocoords"
@@ -239,13 +242,36 @@ def ranking_quality(table, column, subset):
 
 def rank_table(table):
     """Calidad por esquema: con todos sus envíos, sin el ingenuo 00 (que pesa mucho en la
-    brecha media) y en el subconjunto común a los cuatro esquemas."""
+    brecha media), en el subconjunto común a los cuatro esquemas y en ese subconjunto sin
+    el ingenuo, que es el que se reporta: así todos los esquemas ordenan los mismos envíos."""
     models = table[table["numero"] > 0]
     common = table.dropna(subset=list(SCHEMES) + ["kaggle"])
     subsets = {"todos los del esquema": table, "sin el ingenuo": models,
-               "comunes a los cuatro esquemas": common}
+               "comunes a los cuatro esquemas": common,
+               COMMON: common[common["numero"] > 0]}
     rows = [ranking_quality(data, column, subset) for subset, data in subsets.items()
             for column in [*SCHEMES, *REFERENCE]]
+    return pd.DataFrame(rows)
+
+
+def scheme_choices(table, results):
+    """Qué modelo escoge cada esquema: entre los envíos comunes a los cuatro esquemas (con
+    Kaggle de referencia) y entre todas las especificaciones con validación aleatoria y
+    espacial en cv_results."""
+    rows = []
+    common = table.dropna(subset=list(SCHEMES) + ["kaggle"])
+    common = common[common["numero"] > 0]
+    for column in [*SCHEMES, "kaggle"]:
+        best = common.loc[common[column].idxmin()]
+        rows.append({"conjunto": "envíos comunes a los cuatro esquemas", "n": len(common),
+                     "esquema": (SCHEMES | {"kaggle": "Kaggle público"})[column],
+                     "mejor": best["numero"], "mae": best[column]})
+    both = results.dropna(subset=["mae_random", "mae_spatial"])
+    for column in ("mae_random", "mae_spatial"):
+        best = both.loc[both[column].idxmin()]
+        rows.append({"conjunto": "especificaciones con aleatoria y espacial", "n": len(both),
+                     "esquema": SCHEMES[column], "mejor": number_of(best["model"]),
+                     "mae": best[column] / MILLION})
     return pd.DataFrame(rows)
 
 
@@ -258,8 +284,8 @@ def level_gap_link(table):
 
 # ---------------------------------------------------------------- figuras
 
-LABELED = {203: "203", 152: "152", 83: "83", 148: "148"}
-LABEL_SIZE = 7
+LABELED = {152: "152", 148: "148"}
+LABEL_SIZE = ps.LABEL_SIZE
 
 
 def family_handles(families):
@@ -283,8 +309,6 @@ def scatter_families(ax, data, x, y, size=16):
 
 LABEL_OFFSETS = [(4, 2), (4, -9), (-4, 2), (-4, -9), (0, 5), (0, -12), (7, -4), (-7, -4),
                  (10, 8), (10, -16), (-10, 8), (-10, -16)]
-# Posición fija para la 203, que queda junto a la 152 en la espacial.
-PREFERRED_OFFSET = {203: (-4, -9)}
 
 
 def place_labels(ax, data, x, y, labels):
@@ -303,8 +327,7 @@ def place_labels(ax, data, x, y, labels):
         (px, py), width = points[k], 0.55 * LABEL_SIZE * len(text) * scale
         height = LABEL_SIZE * scale
         options = []
-        offsets = [PREFERRED_OFFSET[number]] if number in PREFERRED_OFFSET else LABEL_OFFSETS
-        for dx, dy in offsets:
+        for dx, dy in LABEL_OFFSETS:
             x0 = px + dx * scale - (width if dx < 0 else width / 2 if dx == 0 else 0)
             box = (x0, py + dy * scale, x0 + width, py + dy * scale + height)
             cost = sum(max(0, min(box[2], b[2]) - max(box[0], b[0]))
@@ -320,14 +343,20 @@ def place_labels(ax, data, x, y, labels):
 
 
 def kaggle_points(table):
-    """Envíos con puntaje público, sin el ingenuo (377 M en Kaggle saca de escala los ejes)."""
-    data = table.dropna(subset=["kaggle"])
+    """Envíos con puntaje público y con los cuatro esquemas, sin el ingenuo (377 M en Kaggle
+    saca de escala los ejes): todos los paneles muestran los mismos envíos."""
+    data = table.dropna(subset=list(SCHEMES) + ["kaggle"])
     return data[data["numero"] > 0]
+
+
+# Títulos cortos de los paneles, para que quepan con la letra de diapositiva.
+SHORT_NAMES = {"mae_random": "Aleatoria", "mae_random_twins": "Repetidos juntos",
+               "mae_spatial": "Espacial", "mae_weighted": "Holdout ponderado"}
 
 
 def draw_scheme_panels(axes, data, quality):
     """Cada eje: un esquema contra Kaggle, con la línea de 45° y el Spearman en el título."""
-    stats = quality[quality["conjunto"] == "sin el ingenuo"].set_index("columna")
+    stats = quality[quality["conjunto"] == COMMON].set_index("columna")
     for ax, (column, label) in zip(axes, SCHEMES.items()):
         points = data.dropna(subset=[column]).reset_index(drop=True)
         low = 10 * np.floor(points[column].min() / 10) - 5
@@ -335,20 +364,16 @@ def draw_scheme_panels(axes, data, quality):
         ax.plot([80, 240], [80, 240], color=ps.ANDES["mid"], lw=0.8, ls="--", zorder=1)
         scatter_families(ax, points, column, "kaggle")
         ax.set_xlim(low, high)
-        ax.set_ylim(130, 240)
-        ax.set_yticks(range(140, 241, 20))
+        ax.set_ylim(140, 190)
+        ax.set_yticks(range(140, 191, 10))
         place_labels(ax, points, column, "kaggle", LABELED)
         s = stats.loc[column]
-        ax.set_title(f"{label}\nSpearman {ps.es_number(s['spearman'], 2)} (n = {s['n']})",
+        ax.set_title(f"{SHORT_NAMES[column]}\nSpearman {ps.es_number(s['spearman'], 2)}",
                      fontweight="normal")
         ax.set_xlabel("MAE del esquema (M)")
         ax.xaxis.set_major_formatter(ps.es_formatter())
         ax.yaxis.set_major_formatter(ps.es_formatter())
     axes[0].set_ylabel("MAE público en Kaggle (M)")
-    edge = axes[0].get_xlim()[1]
-    axes[0].annotate("esquema = Kaggle", (edge, edge), xytext=(-2, 2),
-                     textcoords="offset points", ha="right", va="bottom", fontsize=LABEL_SIZE,
-                     color=ps.ANDES["gray"])
 
 
 def plot_vs_kaggle(table, quality):
@@ -379,7 +404,7 @@ def plot_rank_corr(quality):
     labels = list((SCHEMES | REFERENCE).values())
     x = np.arange(len(labels))
     subsets = [("todos los del esquema", ps.ANDES["black"]), ("sin el ingenuo", "#7A7A7A"),
-               ("comunes a los cuatro esquemas", ps.ANDES["mid"])]
+               (COMMON, ps.ANDES["mid"])]
     for offset, (subset, color) in zip([-0.27, 0, 0.27], subsets):
         part = quality[quality["conjunto"] == subset].set_index("esquema").loc[labels]
         ax.bar(x + offset, part["spearman"], width=0.25, color=color, label=subset)
@@ -401,7 +426,7 @@ def plot_twins(table, results):
                          "mae_random_twins": base["mae_random_twins"].to_numpy() / MILLION})
     data = pd.concat([table.dropna(subset=["mae_random", "mae_random_twins"]), base])
     data = data[data["numero"] > 0].sort_values("mae_random_twins", ascending=False)
-    fig, ax = plt.subplots(figsize=ps.FULL)
+    fig, ax = plt.subplots(figsize=(ps.FULL[0], 1.25 * ps.FULL[1]))
     right_edge = 172
     for i, row in enumerate(data.itertuples()):
         color = ps.FAMILY_COLORS[row.familia]
@@ -418,7 +443,8 @@ def plot_twins(table, results):
                 ha="right", va="center", fontsize=LABEL_SIZE, color=ps.ANDES["gray"])
     ax.text(right_edge, len(data) - 0.4, "subida (M)", ha="right", va="bottom",
             fontsize=LABEL_SIZE, color=ps.ANDES["gray"])
-    names = {125: "125 boosting sin regla de gemelos", 127: "127 = 125 + regla de gemelos"}
+    names = {125: "125 boosting sin regla de repetidos",
+             127: "127 = 125 + regla de repetidos"}
     ax.set_yticks(range(len(data)),
                   [names.get(row.numero, f"{row.numero} {ps.FAMILY_LABELS[row.familia]}")
                    for row in data.itertuples()])
@@ -432,7 +458,7 @@ def plot_twins(table, results):
     handles = [plt.Line2D([], [], marker="o", ls="", markerfacecolor="white",
                           markeredgecolor=gray, markeredgewidth=1.1, label="aleatoria simple"),
                plt.Line2D([], [], marker="o", ls="", color=gray, markeredgewidth=0,
-                          label="aleatoria con gemelos"),
+                          label="aleatoria, repetidos juntos"),
                plt.Line2D([], [], marker="|", ls="", color=ps.ANDES["black"], markersize=7,
                           markeredgewidth=1.2, label="Kaggle público")]
     fig.legend(handles=handles, loc="outside upper center", ncol=3)
@@ -440,7 +466,7 @@ def plot_twins(table, results):
 
 
 LEVEL_SERIES = [("mae_spatial", "Espacial", ps.ANDES["black"], "o"),
-                ("mae_weighted", "Nororiental ponderado", "#8C8C8C", "s")]
+                ("mae_weighted", "Holdout ponderado", "#8C8C8C", "s")]
 QUANTILE_SHADES = {53: "#E3C25A", 65: ps.ANDES["accent"]}
 
 
@@ -459,13 +485,16 @@ def plot_level_ladder(ax, results):
     spatial = ladder["mae_spatial"] / MILLION
     for row, xi, yi in zip(ladder.itertuples(), ladder["bias_spatial"] / MILLION, spatial):
         if row.q in (0.60, 0.70, 0.80):
-            ax.annotate(f"q{ps.es_number(row.q, 2)}", (xi, yi), xytext=(-2, 3),
-                        textcoords="offset points", ha="right", fontsize=LABEL_SIZE,
+            ax.annotate(f"q{ps.es_number(row.q, 2)}", (xi, yi), xytext=(0, 6),
+                        textcoords="offset points", ha="center", fontsize=LABEL_SIZE,
                         color=ps.ANDES["gray"])
+    # Rombos: número abajo; la 152 a la derecha porque queda junto a la 127.
     for number, xi, yi in zip(others.index, others["bias_spatial"] / MILLION,
                               others["mae_spatial"] / MILLION):
-        ax.annotate(str(number), (xi, yi), xytext=(0, -10), textcoords="offset points",
-                    fontsize=LABEL_SIZE, color=ps.ANDES["gray"], ha="center")
+        right = number == 152
+        ax.annotate(str(number), (xi, yi), xytext=(5, 0) if right else (0, -6),
+                    textcoords="offset points", fontsize=LABEL_SIZE, color=ps.ANDES["gray"],
+                    ha="left" if right else "center", va="center" if right else "top")
     ax.set_xlim(10, 95)
     ax.set_ylim(115, 165)
     ax.set_xlabel("Sesgo medio en la espacial (M; + = sobrepredice)")
@@ -479,19 +508,21 @@ def plot_level_ladder(ax, results):
 def plot_level_pair(ax, table):
     """El mismo boosting con cuantil 0,65 (53) y 0,70 (65) en tres esquemas."""
     pair = table.set_index("numero").loc[[53, 65]]
-    metrics = [("mae_spatial", "Espacial"), ("mae_weighted", "Ponderado"), ("kaggle", "Kaggle")]
+    metrics = [("mae_spatial", "Espacial"), ("mae_weighted", "Holdout"), ("kaggle", "Kaggle")]
     x = np.arange(len(metrics))
     for offset, (number, row) in zip([-0.15, 0.15], pair.iterrows()):
         values = [row[c] for c, _ in metrics]
         quantile = "0,65" if number == 53 else "0,70"
         ax.scatter(x + offset, values, s=22, color=QUANTILE_SHADES[number], linewidths=0,
                    zorder=3, label=f"{number} (cuantil {quantile})")
-        for xi, value in zip(x + offset, values):
-            # 0,65 a la izquierda del punto y 0,70 encima, para que no choquen.
+        for xi, value, (column, _) in zip(x + offset, values, metrics):
+            if column == "mae_weighted":
+                continue  # en el ponderado los dos quedan a 0,2 M: no se rotulan
+            # 0,65 debajo del punto y 0,70 encima, para que no choquen.
             left = number == 53
-            ax.annotate(ps.es_number(value), (xi, value), xytext=(-3, 0) if left else (0, 3),
-                        textcoords="offset points", va="center" if left else "bottom",
-                        ha="right" if left else "center", fontsize=LABEL_SIZE,
+            ax.annotate(ps.es_number(value), (xi, value), xytext=(0, -4) if left else (0, 3),
+                        textcoords="offset points", va="top" if left else "bottom",
+                        ha="center", fontsize=LABEL_SIZE,
                         color=ps.ANDES["black"])
     ax.set_xticks(x, [label for _, label in metrics])
     ax.set_xlim(-0.6, len(metrics) - 0.4)
@@ -508,7 +539,7 @@ def plot_level(results, table):
     """Escalera de cuantiles: la espacial mejora al bajar el nivel; el ponderado y Kaggle no."""
     results = results.assign(numero=results["model"].map(number_of)).set_index("numero")
     fig, (left, right) = plt.subplots(1, 2, figsize=ps.FULL,
-                                      gridspec_kw={"width_ratios": [1.3, 1]})
+                                      gridspec_kw={"width_ratios": [1.15, 1]})
     plot_level_ladder(left, results)
     plot_level_pair(right, table)
     return ps.save(fig, "validation_level.png")
@@ -523,6 +554,9 @@ def main():
     table.to_csv(VIEWS_DIR / "validation_schemes.csv", index=False)
     quality.to_csv(VIEWS_DIR / "validation_rank_corr.csv", index=False)
     results = pd.read_csv(VIEWS_DIR / "cv_results.csv")
+    choices = scheme_choices(table, results)
+    choices.to_csv(VIEWS_DIR / "scheme_best_model.csv", index=False)
+    print(choices.round(1).to_string(index=False))
     figures = [plot_vs_kaggle(table, quality), plot_vs_kaggle_wide(table, quality),
                plot_rank_corr(quality),
                plot_twins(table, results), plot_level(results, table)]

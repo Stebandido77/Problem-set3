@@ -47,10 +47,10 @@ def plot_deciles(deciles, totals):
         ax.yaxis.set_major_formatter(ps.es_formatter())
     axes[1].axhline(0, color=ANDES["gray"], lw=0.6, zorder=1)
     edges = (f"decil 1: {ps.es_number(deciles['price_min'].iloc[0], 0)}–"
-             f"{ps.es_number(deciles['price_max'].iloc[0], 0)} M; decil 10: "
+             f"{ps.es_number(deciles['price_max'].iloc[0], 0)} M\ndecil 10: "
              f"{ps.es_number(deciles['price_min'].iloc[-1], 0)}–"
              f"{ps.es_number(deciles['price_max'].iloc[-1], 0)} M")
-    axes[0].text(0.02, 0.97, edges, transform=axes[0].transAxes, va="top", fontsize=7,
+    axes[0].text(0.02, 0.97, edges, transform=axes[0].transAxes, va="top", fontsize=ps.LABEL_SIZE,
                  color=ANDES["gray"])
     fig.legend(*axes[0].get_legend_handles_labels(), loc="outside lower center", ncol=2,
                handlelength=2.2, columnspacing=1.5)

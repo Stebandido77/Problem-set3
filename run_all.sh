@@ -69,4 +69,5 @@ fi
 "$PYTHON" 34_best_model_errors.py
 "$PYTHON" 35_purchase_rule.py
 "$PYTHON" 41_beto_figure.py
+"$PYTHON" 42_deck_checks.py
 "$PYTHON" 36_build_presentations.py

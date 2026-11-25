@@ -62,4 +62,5 @@ Run 32_algorithm_comparison.py
 Run 34_best_model_errors.py
 Run 35_purchase_rule.py
 Run 41_beto_figure.py
+Run 42_deck_checks.py
 Run 36_build_presentations.py

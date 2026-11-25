@@ -1,0 +1,8 @@
+conjunto,n,esquema,mejor,mae
+envíos comunes a los cuatro esquemas,8,Aleatoria simple,152,95.5329321914155
+envíos comunes a los cuatro esquemas,8,"Aleatoria, repetidos juntos",83,110.99928319171964
+envíos comunes a los cuatro esquemas,8,Espacial (10 zonas),152,127.64625865429356
+envíos comunes a los cuatro esquemas,8,Holdout ponderado,148,148.2083229086234
+envíos comunes a los cuatro esquemas,8,Kaggle público,152,148.209395
+especificaciones con aleatoria y espacial,58,Aleatoria simple,126,82.93695086260304
+especificaciones con aleatoria y espacial,58,Espacial (10 zonas),127,126.95415921948405

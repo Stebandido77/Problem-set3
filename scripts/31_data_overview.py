@@ -163,7 +163,7 @@ def plot_map(processed):
     ax.scatter(test["lon"], test["lat"], s=0.6, color=TEST_COLOR, alpha=0.6, lw=0,
                rasterized=True)
     ax.set_aspect(1 / np.cos(np.radians(train["lat"].mean())))
-    ax.xaxis.set_major_locator(MaxNLocator(3))
+    ax.xaxis.set_major_locator(MaxNLocator(2))
     ax.yaxis.set_major_locator(MaxNLocator(5))
     ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: ps.es_number(v, 2)))
     ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: ps.es_number(v, 2)))
@@ -172,7 +172,7 @@ def plot_map(processed):
     ax.grid(False)
     label_point(ax, test, f"Test: Chapinero\n{ps.es_number(len(test), 0)} anuncios",
                 0.35, (0.9, 0.4))
-    label_point(ax, train, f"Train: resto de Bogotá\n{ps.es_number(len(train), 0)} anuncios",
+    label_point(ax, train, f"Entrenamiento:\nresto de Bogotá\n{ps.es_number(len(train), 0)} anuncios",
                 0.85, (0.85, 0.92))
     ps.save(fig, "map_train_test.png")
 

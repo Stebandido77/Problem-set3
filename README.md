@@ -2,7 +2,7 @@
 
 **MECA 4107 · Big Data and Machine Learning para Economía Aplicada · Universidad de los Andes · 2026-20**
 
-Equipo 06: _nombres de los integrantes_
+Equipo 06: Neislen García y Esteban Labastidas
 
 ## Qué responde el proyecto
 
@@ -38,8 +38,16 @@ da 124,8 M, optimista frente a los dos tableros. Frente al ingenuo (mediana cons
   la regla que mezcla la predicción con el precio de anuncios de train con la misma
   descripción) más el precio que predice BETO con el texto (`txt_beto`).
 - **Red 196:** la red cuantílica (0,70) por tipo de la 148, con los mismos predictores de la
-  manzana, el ridge del texto y `txt_beto`, sin coordenadas. Es la única familia que predice
-  por encima del tope de precios del train (1.650 M), y por eso mejora la mezcla.
+  manzana, el ridge del texto y `txt_beto`, sin coordenadas. Mejora la mezcla en los dos
+  deciles de precio más caros (desde 891 M): ahí el boosting subpredice más (sesgo de
+  −215 M en el decil 10, frente a −163 M de la red), y la mezcla le gana al boosting solo por
+  2,4 y 9,0 M; en los demás deciles pierde hasta 3,9 M. En la validación espacial la mezcla
+  queda 0,4 M por encima del boosting 198 solo (ruido) y en el holdout nororiental 4,1 M por
+  debajo; la correlación de errores entre los dos miembros es 0,90 y 0,96
+  (`views/blend_deciles.csv`, `views/blend_members.csv`, script `42_deck_checks.py`). La
+  razón no es pasar el tope de 1.650 M: los sondeos indican que el test no lo pasa, y las 20
+  predicciones de la 203 por encima del tope (máximo 1.745 M, `views/test_over_cap.csv`)
+  deberían recortarse, como hace la 206.
 
 Una fila por familia (su mejor especificación con la receta común):
 
@@ -73,12 +81,23 @@ los pesos de la mezcla se escogieron entre 70/30 y 50/50 con esos mismos criteri
 esas filas, esas dos columnas son algo optimistas y Kaggle es la única medida fuera de
 muestra.
 
-- **Validación** (`views/validation_rank_corr.csv`, sin el ingenuo): frente a Kaggle, la
-  aleatoria simple es la que peor ordena los envíos (Spearman 0,44, n = 13); con los anuncios gemelos
-  en la misma partición sube a 0,78; la espacial da 0,74 (n = 16, con la 203) y el holdout
-  nororiental ponderado 0,83 (n = 12; la 203 no entra: su ponderado, optimista, no está en `cv_results.csv`).
-  Todas son optimistas; la espacial, en unos 26 M. La espacial premia bajar el nivel de las
-  predicciones y el tablero no.
+- **Validación** (`views/validation_rank_corr.csv`, conjunto "comunes a los cuatro, sin el
+  ingenuo"): sobre los mismos 8 envíos, el Spearman con el tablero público es 0,76 para la
+  aleatoria simple, 0,74 con los anuncios repetidos en la misma partición, 0,93 para la
+  espacial y 0,88 para el holdout nororiental ponderado. Con conjuntos distintos por esquema
+  el orden cambiaba (la aleatoria simple quedaba en 0,44 con 13 envíos), así que la
+  comparación válida es la del conjunto común: la espacial ordena mejor. Entre esos envíos,
+  la aleatoria y la espacial escogen el mismo mejor modelo (la 152, también la mejor en el
+  tablero); entre las 58 especificaciones con las dos validaciones, escogen la misma receta
+  de boosting con distinta regla de anuncios repetidos (126 y 127;
+  `views/scheme_best_model.csv`). Solo la 203 tiene puntaje privado registrado, así que no
+  hay comparación contra el privado. Todos los esquemas son optimistas; la espacial, en unos
+  18 M en el conjunto común. La espacial premia bajar el nivel de las predicciones y el
+  tablero no.
+- **OpenStreetMap:** empeoró la espacial (+7,9 a +8,6 M). En el test, el rango
+  intercuartílico de cada distancia de OSM es entre 0,6 y 1,5 veces el de entrenamiento
+  (`views/osm_dispersion.csv`), así que "en Chapinero todo queda cerca" no lo explica; la
+  causa no está medida.
 - **Asimetría y regla de compra:** ver la sección "Del modelo a la decisión de compra".
 
 ## Del modelo a la decisión de compra
@@ -122,11 +141,14 @@ que toda compra cerrada es un sobrepago frente al precio pedido. A igual tasa de
 bajar el cuantil sobrepaga menos que descontar la predicción de Kaggle, y ninguna regla baja
 del 10 % del capital.
 
-**Recomendación.** El modelo no sirve para fijar el precio de compra, pero sí para escoger
-candidatos. La regla que proponemos es ofrecer el cuantil 0,20 sin descuento, solo en
-apartamentos (compra el 32,4 % con un sobrepago del 10,9 % del capital, frente a 14,9 % en
-casas), y cerrar después de una tasación física. No lo usaríamos en casas ni con
-predicciones por encima de 900 M, donde la sobrepredicción media pasa de 200 M. Riesgos:
+**Recomendación.** Sí se puede usar para comprar, con una oferta conservadora y un avalúo.
+La regla que proponemos es ofertar el cuantil 0,20 sin descuento (un precio que el 80 % de
+los inmuebles parecidos supera), solo en apartamentos con oferta por debajo de 900 M, y
+cerrar después de un avalúo. En apartamentos se cierra el 32,4 % de las ofertas y la
+empresa sobrepaga el 10,9 % del capital, frente al 16,6 % al ofertar la predicción de la
+203 en apartamentos. En casas sobrepaga el 14,9 %, y en apartamentos con oferta desde
+900 M, el 12,0 %, con 124 M por compra frente a 53 M por debajo de ese valor
+(`views/purchase_rule_segments.csv`). Riesgos:
 (i) los precios son de oferta y no de cierre, así que el sobrepago real puede ser mayor;
 (ii) falta el área en uno de cada cuatro anuncios y ahí el error es mayor; (iii) los datos
 son de 2019 a 2021; (iv) cambio de zona: la espacial (124,8) es optimista frente a Kaggle
@@ -218,6 +240,7 @@ Notas:
 │   ├── 34_best_model_errors.py     Etapa 4: anatomía del error, importancia, pérdida asimétrica
 │   ├── 35_purchase_rule.py         Etapa 4: regla de compra por cuantil y descuento
 │   ├── 41_beto_figure.py           BETO contra el ridge por decil de precio
+│   ├── 42_deck_checks.py           mezcla por decil, tope, dispersión de OSM, área faltante
 │   ├── 36_build_presentations.py   las dos presentaciones
 │   │   — experimentos (ver EXPERIMENTOS.md) —
 │   ├── 37_beto_input.py, beto_kaggle.py   entrada y afinado de BETO (Kaggle, GPU)

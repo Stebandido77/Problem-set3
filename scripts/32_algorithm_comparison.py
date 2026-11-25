@@ -208,7 +208,7 @@ def family_table(results, kaggle, twins):
 # Los seis pasos del camino al mejor modelo: un envío por paso, con lo que cambió.
 STEPS = [
     (0, "Mediana de Bogotá para todo"),
-    (10, "Boosting con el anuncio y coordenadas"),
+    (10, "Boosting: inmueble, texto, hitos y lat/lon"),
     (65, "Por tipo, en pesos, cuantil 0,70"),
     (83, "Texto completo, estrato y Catastro"),
     (152, "Mezcla 70/30 con una red neuronal"),
@@ -289,14 +289,14 @@ def plot_common_recipe(results):
                         arrowprops=dict(arrowstyle="-|>,head_length=0.4,head_width=0.2",
                                         color=color, lw=1.4, shrinkA=0, shrinkB=0))
             ax.plot(start, yi, "o", color=color, ms=3.5, mec="none")
-            ax.text(start + pad, yi, f"{before:02d}", color=gray, va="center", fontsize=7)
-            ax.text(end - pad, yi, str(after), color=gray, va="center", ha="right", fontsize=7,
+            ax.text(start + pad, yi, f"{before:02d}", color=gray, va="center", fontsize=ps.LABEL_SIZE)
+            ax.text(end - pad, yi, str(after), color=gray, va="center", ha="right", fontsize=ps.LABEL_SIZE,
                     bbox=dict(fc="white", ec="none", pad=0.3), zorder=4)
         ref = results.loc[REFERENCE, metric]
         ax.axvline(ref, color=ps.ANDES["gray"], ls="--", lw=0.8)
         ax.text(ref, 1.0, f"boosting 83: {ps.es_number(ref / M)}",
                 transform=ax.get_xaxis_transform(), color=gray, ha="center", va="bottom",
-                fontsize=7)
+                fontsize=ps.LABEL_SIZE)
         ax.set_xlim(min(values + [ref]) - 7 * pad, max(values) + 5 * pad)
         ps.millions(ax, "x")
         ax.set_xlabel(f"{label}: MAE (millones de $)")
@@ -378,7 +378,7 @@ def plot_blend(table):
                     color=ps.FAMILY_COLORS[row.family_key])
         net = table.set_index("numero").loc[148]
         ax.annotate(f"red 148: {ps.es_number(net[y])} M", (net[x], net[y]), xytext=(-6, -2),
-                    textcoords="offset points", ha="right", va="center", fontsize=7,
+                    textcoords="offset points", ha="right", va="center", fontsize=ps.LABEL_SIZE,
                     color=ps.ANDES["black"])
         ax.xaxis.set_major_formatter(ps.es_formatter(2))
         ax.set_xlabel("Correlación del error con el boosting 127")
@@ -387,19 +387,20 @@ def plot_blend(table):
     axes[0].yaxis.set_major_locator(plt.MultipleLocator(2))
     axes[0].yaxis.set_major_formatter(ps.es_formatter(0))
     axes[0].text(0.02, -NOISE_M, "ruido (± 2 M)", transform=axes[0].get_yaxis_transform(),
-                 fontsize=7, color=ps.ANDES["gray"], va="bottom")
+                 fontsize=ps.LABEL_SIZE, color=ps.ANDES["gray"], va="bottom")
     families = list(dict.fromkeys(table["family_key"]))
     handles = [plt.Line2D([], [], ls="", ms=5, mec="none", marker=ps.FAMILY_MARKERS[f],
                           color=ps.FAMILY_COLORS[f]) for f in families]
     labels = [f"{ps.FAMILY_LABELS[f]} "
               f"{', '.join(map(str, table.loc[table.family_key == f, 'numero']))}"
               for f in families]
-    fig.legend(handles, labels, loc="outside lower center", ncol=len(families),
+    fig.legend(handles, labels, loc="outside lower center", ncol=4,
                handletextpad=0.2, columnspacing=1.0)
     ps.save(fig, "family_blend_with_127.png")
 
 
-RANGE_MODELS = [3, 11, 108, 104, 105, 114, 127, 83, 148, 152, 185, 49]
+# Mejor versión de cada familia, las dos mezclas y los miembros de la 203.
+RANGE_MODELS = [108, 104, 105, 114, 185, 127, 198, 148, 196, 152, 203]
 
 
 def test_range(results):
@@ -421,33 +422,31 @@ def test_range(results):
 
 
 def plot_test_range(table):
-    """Predicción máxima en el test por modelo frente al tope del train. Cada barra lleva su
-    máximo y, si llega al tope o lo pasa, cuántas predicciones lo hacen."""
+    """Predicción máxima en el test por modelo frente al tope de los datos de entrenamiento.
+    Cada barra lleva su máximo y, si llega al tope o lo pasa, cuántas de las predicciones del
+    test lo hacen."""
     data = table.sort_values("max_test")
     y = np.arange(len(data))
     cap = CAP / M
     longest = data["max_test"].max()
-    fig, ax = plt.subplots(figsize=ps.FULL)
+    fig, ax = plt.subplots(figsize=ps.FULL_TALL)
     ax.barh(y, data["max_test"], color=[ps.FAMILY_COLORS[f] for f in data["family_key"]],
             height=0.62, lw=0)
     for yi, row in zip(y, data.itertuples()):
         text = f"{ps.es_number(row.max_test, 0)} M"
         if np.isclose(row.max_test, cap):
-            text += f": {row.n_en_1650} en el tope"
+            text += f"; {row.n_en_1650} predicciones en el tope"
         elif row.max_test > cap:
-            text += f": {ps.es_number(row.pct_sobre_1650, 1)} % sobre el tope"
-        inside = row.max_test == longest
-        ax.text(row.max_test - 40 if inside else max(row.max_test, cap) + 40, yi, text,
-                va="center",
-                ha="right" if inside else "left", fontsize=7,
-                color="white" if inside else ps.ANDES["black"])
+            text += f"; {row.n_sobre_1650} predicciones sobre el tope"
+        ax.text(max(row.max_test, cap) + 25, yi, text, va="center", ha="left",
+                fontsize=ps.LABEL_SIZE, color=ps.ANDES["black"])
     ax.axvline(cap, color=ps.ANDES["black"], ls="--", lw=0.8)
-    ax.text(cap + 40, len(data) - 0.55, f"tope del train: {ps.es_number(cap, 0)} M", fontsize=7,
-            color=ps.ANDES["gray"], va="bottom")
-    ax.set_yticks(y, [f"{r.familia} {r.numero:02d}" for r in data.itertuples()], fontsize=7)
+    ax.text(cap - 25, len(data) - 0.45, f"tope de entrenamiento: {ps.es_number(cap, 0)} M",
+            fontsize=ps.LABEL_SIZE, color=ps.ANDES["gray"], va="bottom", ha="right")
+    ax.set_yticks(y, [f"{r.familia} {r.numero:02d}" for r in data.itertuples()])
     ax.tick_params(axis="y", length=0)
-    ax.set_xlim(0, longest * 1.02)
-    ax.set_ylim(-0.6, len(data) + 0.2)
+    ax.set_xlim(0, longest * 1.45)
+    ax.set_ylim(-0.6, len(data) + 0.4)
     ax.xaxis.set_major_formatter(ps.es_formatter(0))
     ax.set_xlabel("Predicción máxima en el test (millones de $)")
     ax.grid(axis="y", visible=False)
@@ -527,7 +526,7 @@ def plot_negative(table):
     ax.set_ylim(low * 0.6, table["delta_weighted"].max() * 1.12)
     ax.fill_between([low, -NOISE_M], low, -NOISE_M, color=ps.UNDER_COLOR, alpha=0.12, lw=0)
     ax.text(low * 0.95, -NOISE_M - 0.6, "mejora ambas: vacío", color=ps.ANDES["gray"],
-            fontsize=7, va="top")
+            fontsize=ps.LABEL_SIZE, va="top")
     ax.set_xlabel("Cambio de MAE espacial (millones de $; > 0 empeora)")
     side.set_ylabel("Cambio de MAE ponderado\n(millones de $; > 0 empeora)")
     side.set_xlim(-1, 1)
