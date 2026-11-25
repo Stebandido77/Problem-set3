@@ -113,7 +113,7 @@ de 1.200 M (sesgo de −205 M). Por precio predicho, que es lo que ve el comprad
 sobrepredicción media sube de 37 M a 213 M. El error es mayor en casas (MAE 175,7 frente a
 108,3 en apartamentos) y cuando falta el área (141,7 frente a 117,0). En el boosting sin
 BETO (la receta de la 125), el ridge del texto concentra el 22 % de la ganancia en
-apartamentos y el 14 % en casas (`views/best_errors_importance.csv`, un ajuste con una
+apartamentos y el 13 % en casas (`views/best_errors_importance.csv`, un ajuste con una
 semilla; no se recalculó con BETO).
 
 **Pérdida asimétrica.** Si sobrepredecir cuesta 2 o 3 veces lo que subpredecir, el orden
@@ -124,7 +124,7 @@ son el boosting sin BETO.
 
 **Regla de compra.** La empresa ofrece la predicción con un descuento y compra si la oferta
 alcanza el precio pedido; la diferencia es sobrepago. La receta del boosting 127 se entrenó
-con cuantiles 0,20, 0,30 y 0,50 (filas 190 a 192, con la misma regla de gemelos).
+con cuantiles 0,20, 0,30 y 0,50 (filas 190 a 192, con la misma regla de anuncios repetidos).
 
 | Regla | Descuento | Compras cerradas | Sobrepago medio | Sobrepago / capital |
 |---|---:|---:|---:|---:|
@@ -158,7 +158,7 @@ nivel correcto en Chapinero es incierto; (v) la regla (cuantil y segmento) se es
 las mismas predicciones espaciales con que se reporta, así que su sobrepago es algo
 optimista. La validación espacial premia bajar el nivel (el
 cuantil 0,50, fila 192, da 118,0 frente a 127,0 de la 127), pero en Kaggle el cuantil 0,70
-le ganó al 0,65 (65 frente a 53), aunque por menos de 1 M.
+quedó 0,7 M por delante del 0,65 (65 frente a 53), una diferencia dentro del ruido.
 
 ## Cómo reproducir
 
@@ -201,7 +201,9 @@ Notas:
 - **Presentaciones.** Son Beamer con la plantilla de los Andes (`document/*.tex`).
   `36_build_presentations.py` escribe desde `views/` las cifras, las tablas y las notas del
   orador, y compila con LuaLaTeX (`latexmk -lualatex`). Las figuras son los PDF vectoriales
-  que dejan en `views/` los scripts 31 a 35 y 41. Sin LaTeX instalado, genera todo menos los PDF.
+  que dejan en `views/` los scripts 31 a 35 y 41. `42_deck_checks.py` y `33` aportan
+  cifras que no son figuras: la mezcla por decil, el tope, OSM, el área faltante y el
+  Spearman sobre los mismos envíos. Sin LaTeX instalado, genera todo menos los PDF.
 - **Predictor de BETO (`txt_beto`).** Es el log del precio que predice
   [BETO](https://huggingface.co/dccuchile/bert-base-spanish-wwm-uncased)
   (`dccuchile/bert-base-spanish-wwm-uncased`) afinado con el título y la descripción. Se
@@ -252,7 +254,7 @@ Notas:
 │   ├── processed/          bases con predictores, descargas externas, hiperparámetros
 │   └── submissions/        un .csv por envío; los reemplazados, en obsoletos/
 ├── views/                  tablas y figuras
-├── EXPERIMENTOS.md         rondas 1 a 10: comandos, tablas y lecciones
+├── EXPERIMENTOS.md         rondas 1 a 11: comandos, tablas y lecciones
 ├── run_all.sh, run_all.ps1 ruta principal
 └── requirements.txt
 ```
@@ -348,7 +350,8 @@ Las cifras de validación de estas filas están en `views/level_calibration.csv`
 
 ## Experimentos
 
-Todo lo que se probó en las rondas 1 a 10 (OSM, objetivos, pérdidas cuantílicas, texto,
-datos de la manzana, gemelos, balanceo, modelo local, apilamiento, monotonía, kNN, mezclas),
+Todo lo que se probó en las rondas 1 a 11 (OSM, objetivos, pérdidas cuantílicas, texto,
+datos de la manzana, gemelos, balanceo, modelo local, apilamiento, monotonía, kNN, mezclas,
+BETO),
 con sus comandos y sus tablas, está en [`EXPERIMENTOS.md`](EXPERIMENTOS.md). La tabla
 completa de resultados es `views/cv_results.csv` (`views/cv_results_table.md`).
