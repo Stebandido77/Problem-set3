@@ -77,6 +77,11 @@ python 40_clip_range.py --model 203_ensemble_w70_30_2 --number 206
 python 40_clip_range.py --model 204_ensemble_w60_40_2 --number 207
 python 40_clip_range.py --model 198_boosting_pt_core_coords_by_type_level_q70_ridge_beto_nocoords_s10_twin_mix --number 208
 python 39_beto_table.py
+# Diversidad de errores (Neislen). 43 reescribe en oof_predictions.csv las columnas de estas
+# especificaciones; 45 escribe los envíos 209 a 216 desde test_predictions.csv.
+python 43_rebuild_oof.py --specs 3 45 54 65 77 --schemes random_twins spatial chapinero northeast
+python 44_analyze_oof.py
+python 45_new_submissions.py
 python 07_results_table.py                # tabla de resultados para el README
 python 08_calibrate_holdout.py            # opcional: ~5 min por esquema candidato
 python 09_level_calibration.py --number 57 --factors 1.10 1.15 1.20 \
@@ -876,6 +881,51 @@ descripción idéntica. 155 filas (37 grupos) tienen gemelos físicos con otra d
   de más de 1.000 M que el holdout deja fuera del ajuste.
 
 Por eso la decisión se toma con la espacial y el ponderado solo se reporta.
+
+### Diversidad de errores fuera de muestra (scripts 43 a 45)
+
+Análisis de Neislen, hecho en paralelo a la ronda 8 (22 de noviembre). Se fusionó a la rama
+principal el 25 de noviembre. Sus scripts y envíos se renumeraron para no chocar con los que
+ya existían:
+- los scripts pasaron de 23–25 a 43–45;
+- los envíos pasaron de 154–161 a 209–216, porque las filas 154 a 161 de `cv_results.csv`
+  son otros modelos.
+
+No amplía la búsqueda de hiperparámetros. Reconstruye las predicciones fuera de muestra de
+cinco modelos (03, 45, 54, 65 y 77) en cuatro esquemas, mide qué tan distintos son sus
+errores y define mezclas con pesos fijados antes de mirar el tablero.
+
+Métricas reconstruidas, en millones de pesos (`views/oof_model_metrics.csv`):
+
+| Modelo | Aleatoria, repetidos juntos | Espacial | Tipo Chapinero | Nororiental |
+|---|---:|---:|---:|---:|
+| 03 lineal | 156,1 | 168,1 | 183,3 | 190,0 |
+| 45 boosting | **108,4** | **135,9** | 174,1 | 168,5 |
+| 54 híbrido q0,65 | 116,4 | 142,8 | 157,9 | **157,8** |
+| 65 boosting q0,70 | 118,5 | 148,9 | 159,0 | 162,9 |
+| 77 boosting externo q0,70 | 117,7 | 146,0 | **151,2** | 162,7 |
+
+**Lectura:**
+- **Ningún modelo gana en todos los esquemas.**
+- **Lineal 03:** es el que más difiere de los árboles. La correlación de sus errores con el 77
+  es 0,657 con los repetidos juntos y 0,683 en la espacial (`views/oof_error_correlations.csv`).
+- **Mezclas fuera de muestra** (`views/oof_ensemble_candidates.csv`): `E05_45_77_03_w70_20_10`
+  baja el MAE espacial del 45 de 135,9 a 134,1 M. En los holdouts siguen ganando los modelos
+  solos.
+
+**Envíos de `45_new_submissions.py`** (trazabilidad en `views/new_submissions_manifest.csv`;
+no tienen puntaje registrado en `views/kaggle_scores.csv`):
+
+| Envío | Mezcla |
+|---:|---|
+| 209 | 80 % de la 83 y 20 % de la 54 |
+| 210 | 60 % de la 83, 20 % de la 54 y 20 % de la 45 |
+| 211 | 70 % de la 83, 20 % de la 54 y 10 % de la 03 |
+| 212 | 70 % de la 83, 15 % de la 54 y 15 % de la 77 |
+| 213 | 60 % de la 83, 20 % de la 127 y 20 % de la red 148 |
+| 214 | promedio simple de la 83, la 127 y la 148 |
+| 215 | mediana de la 83, la 127 y la 148 |
+| 216 | 70 % de la 83, 15 % del bosque 114 y 15 % de la red 148 |
 
 ### Calibración de nivel (no es un modelo)
 

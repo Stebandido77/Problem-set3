@@ -247,6 +247,8 @@ Notas:
 │   │   — experimentos (ver EXPERIMENTOS.md) —
 │   ├── 37_beto_input.py, beto_kaggle.py   entrada y afinado de BETO (Kaggle, GPU)
 │   ├── 39_beto_table.py, 40_clip_range.py   tabla de la ronda de BETO y recorte al rango
+│   ├── 43_rebuild_oof.py, 44_analyze_oof.py, 45_new_submissions.py   diversidad de errores
+│   │                       fuera de muestra y envíos 209 a 216
 │   └── 05, 08–10, 12, 14, 15, 17–19, 21–25, 27–30
 ├── stores/
 │   ├── raw/                datos de Kaggle (train, test, plantilla de envío)
