@@ -12,13 +12,13 @@
 
 \title[Comparación de modelos y validaciones]{Por qué gana la mezcla de boosting y red neuronal}
 \subtitle{Comparación de familias y de esquemas de validación}
-\author[Equipo 06]{[NOMBRES]}
+\author[Equipo 06]{\Authors\\ Equipo 06}
 \institute{Big Data y Machine Learning (MECA 4107)\\ Universidad de los Andes}
 \date[Nov.\ 2026]{Bogotá, noviembre de 2026}
 
 \newcommand{\twolines}[2]{\begin{tabular}[t]{@{}c@{}}#1\\#2\end{tabular}}
 % Figura a casi todo el ancho y, debajo, las viñetas que dicen qué mirar en ella.
-\newcommand{\figslide}[2][0.88]{\centering\includegraphics[width=#1\textwidth]{#2}\par\vspace{2pt}}
+\newcommand{\figslide}[2][0.86]{\centering\includegraphics[width=#1\textwidth]{#2}\par\vspace{2pt}}
 \newenvironment{lookat}{\begin{itemize}\small\setlength{\itemsep}{1pt}}{\end{itemize}}
 
 \begin{document}
@@ -34,14 +34,14 @@
   \begin{columns}[T]
     \column{0.32\textwidth}\centering \keyfig{\KagBest\ M}{\twolines{tablero público}{(\SharePublic\ del test)}}
     \column{0.32\textwidth}\centering \keyfig{\KagPrivate\ M}{\twolines{tablero privado, 1.\textsuperscript{er} puesto}{(\GapSecond\ M sobre el segundo)}}
-    \column{0.32\textwidth}\centering \keyfig{\SpatialBest\ M}{\twolines{validación espacial: zonas}{que no vio al entrenar}}
+    \column{0.32\textwidth}\centering \keyfig{\SpatialBest\ M}{\twolines{validación espacial: zonas}{que el modelo no vio}}
   \end{columns}
   \vfill
   \begin{itemize}\small
     \item MAE: error promedio en pesos entre el precio predicho y el observado.
     \item Boosting: muchos árboles pequeños; cada uno corrige el error del anterior.
     \item Red neuronal: modelo que puede predecir por encima de los precios que vio.
-    \item Mezcla: promedio ponderado de los dos, 70\,\% boosting y 30\,\% red.
+    \item Mezcla: promedio ponderado, 70\,\% boosting y 30\,\% red.
   \end{itemize}
   \vfill
 \end{frame}
@@ -50,44 +50,42 @@
 \begin{frame}{El boosting gana la espacial y el tablero; la red, el ponderado}
   \centering\scriptsize
   \input{generated/tabla_familias}
-  \par\vspace{2pt}{\scriptsize\color{andesgray} MAE en millones de pesos; menos es mejor. La elastic net no se subió a Kaggle.}
-  \vfill
-  \begin{itemize}\small
-    \item Gemelos: validación aleatoria (anuncios al azar de zonas ya vistas), con las copias juntas.
-    \item Ponderado: holdout al lado de Chapinero, con los pesos del test.
-    \item La red gana el ponderado, pero en el tablero queda detrás del boosting.
-    \item Sin ponderado para la 203: BETO se afinó con precios de ese holdout.
+  \par\vspace{1pt}{\scriptsize\color{andesgray} MAE en millones. 49 y 54: elastic net con un boosting sobre sus residuos; el elastic net puro no tiene envío.}
+  \begin{itemize}\small\setlength{\itemsep}{0pt}
+    \item Validación aleatoria: anuncios al azar de las mismas zonas que el modelo ya vio.
+    \item Repetidos: la aleatoria con las copias de un inmueble en la misma partición.
+    \item Ponderado: anuncios de entrenamiento vecinos a Chapinero, ponderados como el test.
+    \item La 203 va sin ponderado: BETO se afinó con precios de ese holdout.
   \end{itemize}
-  \vfill
 \end{frame}
 
 % 3 ---------------------------------------------------------------
-\begin{frame}{Los árboles no predicen por encima del tope del train; la red sí}
-  \figslide{family_test_range}
+\begin{frame}{La red pasa el tope en \NOverNet\ predicciones; el boosting, en \NOverBoost}
+  \figslide[0.8]{family_test_range}
   \begin{lookat}
-    \item Línea punteada: el precio más alto del train, 1.650 M.
-    \item CART (\MaxCart\ M) y bosque (\MaxForest\ M) quedan bajo el tope: un árbol promedia lo que vio.
-    \item La red 148 llega a \MaxNet\ M: por eso aporta en los inmuebles caros.
+    \item Etiqueta: cuántas de las \NTest\ predicciones del test pasan de 1.650 M.
+    \item El boosting suma muchos árboles; esa suma puede pasar el precio más alto que vio.
+    \item Los sondeos indican un test recortado en 1.650 M: las \NOverBest\ de la 203 deben recortarse.
   \end{lookat}
 \end{frame}
 
 % 4 ---------------------------------------------------------------
-\begin{frame}{La red mejora la mezcla; el bosque comete los mismos errores}
-  \figslide{family_blend_with_127}
+\begin{frame}{La red mejora el ponderado y Kaggle; la espacial queda igual}
+  \figslide[0.78]{family_blend_with_127}
   \begin{lookat}
-    \item Cada punto: mezcla 70/30 del boosting 127 con otra familia; abajo es mejor.
-    \item Bosque: correlación de errores de \CorrForest; el ponderado cambia \BlendForestGain\ M.
-    \item Red: correlación de \CorrNet\ y buena sola; el ponderado cambia \BlendNetGain\ M.
+    \item Con la red, la espacial cambia \BlendNetSpatial\ M (ruido) y el ponderado \BlendNetGain\ M.
+    \item En el tablero, del mejor boosting solo a la primera mezcla: \KagBoost\ a \KagStepE\ M.
+    \item Por decil, la mezcla le gana al boosting solo en los deciles \MixWinDeciles\ (desde \MixWinLow\ M).
   \end{lookat}
 \end{frame}
 
 % 5 ---------------------------------------------------------------
-\begin{frame}{La receta común mejora a todas las familias}
-  \figslide{common_recipe}
+\begin{frame}{La receta común mejora a todas las familias en el ponderado}
+  \figslide[0.8]{common_recipe}
   \begin{lookat}
+    \item Cada flecha va de la versión inicial (número a la derecha) a la mejor (a la izquierda).
     \item Receta: por tipo, precio en pesos, cuantil 0,70, estrato, terreno y ridge del texto.
-    \item Cuantil 0,70: apuntar a un precio que el 70\,\% de los parecidos no supera.
-    \item Todas ganan entre \RecipeGainMin\ y \RecipeGainMax\ M en el ponderado; en la espacial, ninguna pasa al 83.
+    \item Ganan de \RecipeGainMin\ a \RecipeGainMax\ M en el ponderado; en la espacial, ninguna pasa al boosting.
   \end{lookat}
 \end{frame}
 
@@ -98,67 +96,65 @@
   \input{generated/tabla_beto}
   \par\vspace{2pt}{\scriptsize\color{andesgray} Validación espacial, MAE en millones de pesos.}
   \vfill
-  \begin{itemize}\small
+  \begin{itemize}\small\setlength{\itemsep}{1pt}
     \item Ridge sobre TF-IDF: regresión que le pone un peso a cada palabra del anuncio.
     \item BETO: modelo de lenguaje en español, afinado aquí para estimar el precio desde el texto.
+    \item Cuantil 0,70: un precio que el 70\,\% de los inmuebles parecidos no supera.
     \item Con BETO junto al ridge, la mezcla baja \GainBetoKaggle\ M en el tablero público.
-    \item Solo lo probamos en el boosting y la red, no en las demás familias.
   \end{itemize}
   \vfill
 \end{frame}
 
 % 7 ---------------------------------------------------------------
-\begin{frame}{Todos los esquemas son optimistas frente al tablero}
+\begin{frame}{Con los mismos \NCommon\ envíos, la validación espacial ordena mejor}
   \figslide[0.8]{validation_vs_kaggle_wide}
   \begin{lookat}
-    \item Validación aleatoria: probar en anuncios al azar, de las mismas zonas que ya vio.
-    \item Puntos sobre la diagonal: el esquema promete menos error que el tablero público.
-    \item Spearman (1 = mismo orden que el tablero): aleatoria \SpRandom, espacial \SpSpatial.
+    \item Spearman con el tablero público (1 = mismo orden), sobre los mismos \NCommon\ envíos.
+    \item Aleatoria y espacial escogen el mismo mejor envío, que también gana en el tablero.
+    \item Solo el modelo final tiene puntaje privado registrado: sin comparación contra el privado.
   \end{lookat}
 \end{frame}
 
 % 8 ---------------------------------------------------------------
-\begin{frame}{Los anuncios repetidos inflan la validación aleatoria}
-  \figslide{validation_twins}
+\begin{frame}{Los anuncios repetidos bajan el MAE aleatorio hasta \TwinRiseMax\ M}
+  \figslide[0.68]{validation_twins}
   \begin{lookat}
-    \item Círculo vacío: aleatoria simple; lleno: gemelos en la misma partición; raya: tablero.
-    \item Con los gemelos juntos, el MAE de la mezcla 152 sube de \RandomBefore\ a \TwinsBefore\ M.
-    \item Aun así, todos quedan lejos del tablero: Chapinero es otra zona.
+    \item Círculo vacío: aleatoria; lleno: repetidos juntos; raya: tablero público.
+    \item Con las copias juntas, la mezcla sin BETO sube de \RandomBefore\ a \TwinsBefore\ M.
+    \item Aun así, cada modelo queda a más de \TwinGapMin\ M de su puntaje en el tablero.
   \end{lookat}
 \end{frame}
 
 % 9 ---------------------------------------------------------------
-\begin{frame}{La validación espacial premia bajar el nivel; el tablero no}
-  \figslide{validation_level}
+\begin{frame}{La validación espacial premia bajar el nivel}
+  \figslide[0.84]{validation_level}
   \begin{lookat}
-    \item Izquierda: con menos sesgo (cuantil más bajo), el MAE espacial baja.
-    \item El ponderado casi no cambia entre los cuantiles 0,60 y 0,70.
-    \item Derecha: el 0,65 gana en la espacial, pero no en el tablero (\KagQsixtyfive\ frente a \KagStepC\ M).
+    \item Izquierda: con cuantiles más bajos el MAE espacial baja y el ponderado casi no cambia.
+    \item Derecha: el 0,65 gana \LevelSpatialGain\ M en la espacial y pierde \LevelKaggleLoss\ M en el tablero.
+    \item Por eso la espacial ordena modelos de nivel parecido y el tablero fija el nivel.
   \end{lookat}
 \end{frame}
 
 % 10 --------------------------------------------------------------
 \begin{frame}{Ninguna de las \NNegative\ variantes mejoró los dos criterios a la vez}
-  \figslide{negative_results}
+  \figslide[0.84]{negative_results}
   \begin{lookat}
-    \item Cada punto: una variante frente a su referencia; a la derecha o arriba es peor.
-    \item La esquina de abajo a la izquierda, que mejora ambas, está vacía.
-    \item OpenStreetMap empeora la espacial (\OsmSpatial\ M): en Chapinero casi todo queda cerca.
+    \item Cada punto compara una variante con su referencia; arriba o a la derecha es peor.
+    \item OpenStreetMap empeora la espacial (\OsmSpatial\ M).
+    \item En el test, esas distancias varían \OsmIqrMin\ a \OsmIqrMax\ veces lo de entrenamiento.
   \end{lookat}
 \end{frame}
 
 % 11 --------------------------------------------------------------
-\begin{frame}{Cada familia gana en algo y paga en otra cosa}
+\begin{frame}{Cada familia gana en un criterio y cede en otro}
   \begin{itemize}
-    \item Boosting: el mejor en zonas que no vio, pero no pasa el tope del train.
-    \item Red neuronal: pasa el tope, pero sola es peor en el tablero (\KagNet\ M).
-    \item Regresión lineal: fácil de leer, pero viaja mal a Chapinero (\KagLinear\ M).
-    \item BETO: lee mejor el texto, pero exige GPU y su ponderado no es limpio.
+    \item Boosting: el menor error en zonas no vistas; subpredice los inmuebles más caros.
+    \item Red neuronal: corrige los dos deciles más caros; sola da \KagNet\ M en el tablero.
+    \item Regresión lineal: la más fácil de leer; en el tablero queda en \KagLinear\ M.
+    \item BETO: mejora a los dos miembros; requiere GPU y deja optimista el ponderado.
   \end{itemize}
-  \vfill
-  \takeaway{El mejor modelo para el tablero no es el mejor para comprar: si sobrepagar cuesta el triple, la 203 cae al puesto \BestRankKthree.}
 \end{frame}
 
-\andesclosing{¡Gracias!}{Equipo 06 · MECA 4107}
+\andesclosing{¡Gracias!}{\Authors\ · Equipo 06 · MECA 4107}
 
 \end{document}

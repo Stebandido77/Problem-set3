@@ -1,15 +1,17 @@
 % Generado por scripts/36_build_presentations.py. No editar.
 \begin{tabular}{lrlrrrr}
 \toprule
-Familia & Envío & Búsqueda & Gemelos & Espacial & Ponderado & Público \\
+Familia & Envío & Búsqueda & Repetidos & Espacial & Ponderado & Público \\
 \midrule
 Regresión lineal & 108 & No aplica (MCO) & 144,1 & 164,1 & 166,0 & 180,5 \\
-Elastic net & 104 & Optuna TPE, 15 evaluaciones & 144,5 & 158,5 & 165,8 & -- \\
-CART & 105 & Optuna TPE, 25 evaluaciones & 141,3 & 159,8 & 168,7 & 177,5 \\
-Random forest & 114 & Optuna TPE, 25 evaluaciones & 123,1 & 143,8 & 159,6 & 158,9 \\
-Boosting & 127 & Búsquedas probadas, sin mejora & 110,2 & 127,0 & 155,5 & -- \\
-Boosting & 83 & Búsquedas probadas, sin mejora & 111,0 & 131,5 & 154,8 & 152,1 \\
-Red neuronal & 148 & Búsquedas probadas, sin mejora & 124,8 & 137,6 & 148,2 & 157,1 \\
+Elastic net & 104 & Optuna TPE (15) & 144,5 & 158,5 & 165,8 & sin envío \\
+Elastic net + boosting & 49 & -- & -- & 137,4 & 162,3 & 184,1 \\
+Elastic net + boosting q0,65 & 54 & -- & -- & 142,7 & 156,4 & 173,3 \\
+CART & 105 & Optuna TPE (25) & 141,3 & 159,8 & 168,7 & 177,5 \\
+Random forest & 114 & Optuna TPE (25) & 123,1 & 143,8 & 159,6 & 158,9 \\
+Boosting & 127 & Probadas, sin mejora & 110,2 & 127,0 & 155,5 & -- \\
+Boosting & 83 & Probadas, sin mejora & 111,0 & 131,5 & 154,8 & 152,1 \\
+Red neuronal & 148 & Probadas, sin mejora & 124,8 & 137,6 & 148,2 & 157,1 \\
 Mezcla & 152 & Pesos fijos 70/30 & 112,2 & 127,6 & 151,7 & 148,2 \\
 \textbf{Mezcla con BETO} & \textbf{203} & \textbf{Pesos fijos 70/30} & \textbf{--} & \textbf{124,8} & \textbf{--} & \textbf{145,7} \\
 \bottomrule
